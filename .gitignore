@@ -31,3 +31,22 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# Data and Databases (Common in RAG pipelines)
+data/
+*.db
+*.sqlite
+*.sqlite3
+chroma_db/
+vector_store/
+
+# Logs
+*.log
+
+# Jupyter Notebooks (Common for AI/data exploration)
+.ipynb_checkpoints/
+
+# Playwright Test Outputs
+test-results/
+playwright-report/
+blob-report/
