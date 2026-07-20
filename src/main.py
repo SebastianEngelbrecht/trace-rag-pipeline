@@ -44,9 +44,11 @@ async def run_pipeline():
     db_manager = ChromaManager()
     db_manager.add_chunks(chunks, embeddings)
     print(f"Successfully stored in ChromaDB. Total items in DB: {db_manager.count()}")
+    print(f"Pipeline completed successfully! ✅")
 
 def main():
     asyncio.run(run_pipeline())
 
 if __name__ == "__main__":
     main()
+
