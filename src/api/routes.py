@@ -128,9 +128,8 @@ async def websocket_ingest(websocket: WebSocket):
 
 @app.post("/query/advanced", response_model=GenerationResponse)
 def query_rag_advanced(request: QueryRequest):
-    import time
-    start_time = time.time()
     """Hits the vector database, formats chunks, asks LLM, and returns full context (Prompt, Chunks, Answer)."""
+    start_time = time.time()
     try:
         question_embedding = engine.embedder.generate_embeddings([request.question])[0]
         results = engine.db.query(query_embeddings=[question_embedding], n_results=request.top_k)
