@@ -14,7 +14,7 @@ This complete ingestion and retrieval pipeline supports the following capabiliti
 - **Embeddings:** Generating embeddings using the native `google-genai` Gemini Client
 - **Vector Store:** Local persistence of embeddings and metadata using ChromaDB
 - **REST API:** A FastAPI backend allowing background initiation of crawl jobs, and searching your vector store.
-- **Structured Logging:** Centralized structlog configurations emitting contextual JSON pipelines.
+- **Structured Logging:** Centralized structlog configuration emitting structured logs (ConsoleRenderer by default; JSON rendering can be enabled for service deployments).
 
 ## Architecture & Project Structure
 
