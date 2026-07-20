@@ -120,9 +120,11 @@ async def websocket_ingest(websocket: WebSocket):
         end_time = time.time(); elapsed_time = round(end_time - start_time, 2); await websocket.send_json({"status": "complete", "message": f"Pipeline run complete in {elapsed_time}s."})
         
     except WebSocketDisconnect:
-        print("Client disconnected")
+        from src.config.logger import get_logger
+        get_logger(__name__).info("websocket_client_disconnected")
     except Exception as e:
-        traceback.print_exc()
+        from src.config.logger import get_logger
+        get_logger(__name__).exception("websocket_ingest_failed", error=str(e))
         await websocket.send_json({"status": "error", "message": str(e)})
 
 
