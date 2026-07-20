@@ -125,29 +125,3 @@ if __name__ == "__main__":
             print(json.dumps(chunked_output[0], indent=2, ensure_ascii=False))
 
     asyncio.run(local_pipeline_test())
-
-"""
-# ==============================================================================
-# ENTERPRISE SCALING NOTES & FUTURE ARCHITECTURE
-# ==============================================================================
-# 
-# 1. MEMORY EFFICIENCY (Generators & Batching)
-# Currently, `process_crawled_data` returns a single, massive list holding all chunks.
-# At scale (e.g., 10,000+ pages), this will cause Out-Of-Memory (OOM) crashes.
-# FIX: Convert it to a generator that `yield`s small batches (e.g., 100-500 chunks).
-# This keeps memory flat and perfectly matches Vector DB insertion requirements.
-#
-# 2. SPEED & CONCURRENCY (Async vs Multiprocessing)
-# You cannot make text chunking faster just by adding `async`. 
-# - Crawling & Embedding are I/O-bound (waiting on network). They LOVE `asyncio`.
-# - Text splitting is CPU-bound (doing math/string ops). Handing it to `asyncio`
-#   actually blocks your event loop. 
-# FIX: If chunking becomes a bottleneck, dispatch it to multiple CPU cores using 
-# Python's `multiprocessing` pool, entirely separate from the async loops.
-#
-# 3. PRODUCTION PIPELINE DESIGN
-# To achieve true enterprise speed, don't wait for crawling to finish before chunking.
-# Use an Async Queue workflow (Producer-Consumer):
-# [Async Crawler] --yields html--> [Async Queue] --pulls/chunks/batches--> [Async Embedder]
-# ==============================================================================
-"""

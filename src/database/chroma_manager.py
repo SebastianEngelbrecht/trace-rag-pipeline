@@ -1,1 +1,1 @@
-# Add the code for the database manager here. This will handle the connection to the Chroma database and provide methods for storing and retrieving embeddings.
+"""Placeholder module for future Chroma persistence integration."""
