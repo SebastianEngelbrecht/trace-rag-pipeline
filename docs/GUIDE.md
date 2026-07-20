@@ -67,4 +67,4 @@ Currently, the primary exposed systems are:
 - `GET /` - UI Dashboard.
 - `WS /ws/ingest` - WebSocket connection handling live streaming web crawling & embedding pipeline.
 - `POST /query/advanced` - Provide `{ "question": "...", "top_k": 5 }` to execute the full retrieval, format the prompt, and execute the Gemini LLM. Returns LLM answer alongside retrieved citation chunks.
-- `GET /health` - Basic health check and db count verification.
+- `GET /api/v1/stats` - Returns vector DB document count statistics.
