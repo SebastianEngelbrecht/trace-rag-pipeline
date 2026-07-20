@@ -64,10 +64,10 @@ class RAGEngine:
 
         for docs in results_list:
             for rank, doc in enumerate(docs):
-                # Use page_content as a unique identifier for simplicity, 
-                # or a unique chunk ID if available in metadata
-                doc_id = doc.page_content
-                if doc_id not in fused_scores:
+                # Prefer stable identifiers to avoid collisions across identical text chunks.
+                source_url = doc.metadata.get("source_url")
+                chunk_index = doc.metadata.get("chunk_index")
+                doc_id = f"{source_url}::{chunk_index}" if source_url is not None and chunk_index is not None else doc.page_content
                     fused_scores[doc_id] = 0
                     doc_map[doc_id] = doc
                 fused_scores[doc_id] += 1 / (k + rank)
