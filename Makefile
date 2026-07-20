@@ -9,7 +9,7 @@ install:
 dev:
 	uv run uvicorn src.api.routes:app --reload
 
-# Run the standalone ingestion pipeline script
+# Run the FastAPI server via the Python entry point (no auto-reload)
 run:
 	uv run python src/main.py
 
