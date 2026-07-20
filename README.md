@@ -13,18 +13,21 @@ This complete ingestion and retrieval pipeline supports the following capabiliti
 - **Text Chunking:** Cleaning and chunking of text using LangChain recursive text splitters
 - **Embeddings:** Generating embeddings using the native `google-genai` Gemini Client
 - **Vector Store:** Local persistence of embeddings and metadata using ChromaDB
+- **LLM Generation:** Injecting searched context into Gemini models using the `genai` SDK
 - **REST API:** A FastAPI backend allowing background initiation of crawl jobs, and searching your vector store.
 - **Structured Logging:** Centralized structlog configuration emitting structured logs (ConsoleRenderer by default; JSON rendering can be enabled for service deployments).
 
 ## Architecture & Project Structure
 
-The project encompasses tools for both offline data ingestion and live querying:
+The project encompasses tools for both offline data ingestion and live querying handled through a unified FastAPI application. See more details in the [Architecture & Guide](docs/GUIDE.md).
 
 ```text
 src/
-  main.py                  Standalone testing script for the full pipeline
+  main.py                  Application entry point for the FastAPI server
   api/
-    routes.py              FastAPI server entry point & REST endpoints
+    routes.py              FastAPI REST endpoints and WebSocket ingestion logic
+    templates/
+      index.html           Interactive web dashboard UI
   config/
     settings.py            Pydantic settings loading from `.env`
     logger.py              Structlog structured logging configuration
@@ -32,6 +35,8 @@ src/
     chroma_manager.py      ChromaDB vector store integration
   embedding/
     gemini.py              Batch embedding generation
+  generation/
+    engine.py              Retrieval-Augmented Generation execution logic
   ingestion/
     crawler.py             Async Playwright crawler
     chunker.py             Text cleaning and chunk generation
@@ -83,23 +88,17 @@ LOG_LEVEL="INFO" # Optional: DEBUG, INFO, WARNING, ERROR
 
 ## Usage
 
-### Using the REST API
+### Using the Web UI Dashboard
 
-The recommended way to interact with the system is via the FastAPI backend. You can use the Makefile to start the local server with live-reloading:
+The recommended way to interact with the system is via the FastAPI backend and its included UI application. Start the local server with live-reloading:
 
 ```bash
 make dev
 ```
 
-The API will run locally at `http://0.0.0.0:8000`. You can visit `http://127.0.0.1:8000/docs` to interact with the auto-generated Swagger UI.
+The Web UI dashboard will run locally at `http://localhost:8000/`. You can visit `http://localhost:8000/docs` to interact with the auto-generated API Swagger documentation.
 
-### Running a Pipeline Test Script
-
-If you want to invoke a quick pipeline smoke test from the CLI (crawls 'example.com', chunks, embeds, and saves to the database), run:
-
-```bash
-make run
-```
+For complete details on using the interactive UI, executing crawl pipelines, and running RAG requests, refer to the [System Guide](docs/GUIDE.md).
 
 ## Contributing
 
