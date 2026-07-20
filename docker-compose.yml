@@ -1,0 +1,16 @@
+services:
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: trace-rag-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Map the local data directory to persist the ChromaDB knowledge base across container restarts
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}

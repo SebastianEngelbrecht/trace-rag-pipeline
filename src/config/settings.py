@@ -14,11 +14,16 @@ class Settings(BaseSettings):
     CHAT_MODEL: str = "gemini-3.1-flash-lite"
     
     # Vector Database Configuration
-    CHROMA_DB_DIR: str = "./chroma_store"
+    # TODO: Currently using local disk storage for testing & prototyping.
+    # After testing is complete and we need to scale, migrate to a managed vector DB like Pinecone.
+    CHROMA_DB_DIR: str = str(ROOT_DIR / "data" / "knowledge_base")
     
     # Crawler Configuration
     MAX_CRAWL_DEPTH: int = 3
     MAX_CONCURRENCY: int = 5
+    
+    # Logging
+    LOG_LEVEL: str = "INFO"
     
     # Pydantic v2 config standard
     # Provide the absolute path string so Pydantic knows exactly where to look
@@ -28,5 +33,9 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
-settings = Settings()
+from functools import lru_cache
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
 

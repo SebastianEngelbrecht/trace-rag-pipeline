@@ -1,6 +1,14 @@
 import asyncio
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from playwright.async_api import async_playwright
+import sys
+from pathlib import Path
+
+# Provide resolving for standalone runs
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from src.config.logger import get_logger
+
+logger = get_logger(__name__)
 
 class AsyncCrawler:
     def __init__(self, base_url: str, max_depth: int = 3, max_concurrency: int = 5):
@@ -60,7 +68,7 @@ class AsyncCrawler:
         except Exception:
             return False
 
-    async def _worker(self, queue: asyncio.Queue, context):
+    async def _worker(self, queue: asyncio.Queue, context, out_queue: asyncio.Queue = None):
         """Worker instance designed to process queue segments concurrently."""
         while True:
             url, depth = await queue.get()
@@ -71,7 +79,7 @@ class AsyncCrawler:
                     continue
                 self.visited_urls.add(url)
 
-            print(f"[CRAWLER] Worker processing Depth {depth} -> {url}")
+            logger.info("processing_url", depth=depth, url=url)
             
             page = await context.new_page()
             try:
@@ -81,8 +89,11 @@ class AsyncCrawler:
                 # Extract page details
                 text_content = await page.evaluate("document.body.innerText")
                 
-                async with self.lock:
-                    self.results[url] = text_content
+                if out_queue:
+                    await out_queue.put((url, text_content))
+                else:
+                    async with self.lock:
+                        self.results[url] = text_content
 
                 # Discover downstream page anchors
                 hrefs = await page.eval_on_selector_all("a", "elements => elements.map(el => el.href)")
@@ -96,12 +107,12 @@ class AsyncCrawler:
                             await queue.put((absolute_url, depth + 1))
                             
             except Exception as e:
-                print(f"[ERROR] Failed to scrape reference link {url}: {str(e)}")
+                logger.error("crawl_error", url=url, error=str(e))
             finally:
                 await page.close()
                 queue.task_done()
 
-    async def crawl(self):
+    async def crawl(self, out_queue: asyncio.Queue = None):
         """Main orchestrator utilizing a concurrent worker execution loop."""
         async with async_playwright() as p:
             # Optimize memory utilization by disabling features unnecessary for text retrieval
@@ -119,7 +130,7 @@ class AsyncCrawler:
             
             # Fire up parallel workers up to max_concurrency ceiling
             workers = [
-                asyncio.create_task(self._worker(queue, context)) 
+                asyncio.create_task(self._worker(queue, context, out_queue)) 
                 for _ in range(self.max_concurrency)
             ]
             

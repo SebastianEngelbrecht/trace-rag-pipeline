@@ -2,9 +2,22 @@
 import asyncio
 import re
 import uuid
+import sys
+from pathlib import Path
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing import List, Dict
 
+# Provide resolving for standalone runs
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from src.config.logger import get_logger
+
+logger = get_logger(__name__)
+
+# Late import to avoid circular dependencies if used in some contexts, but ideal for token coupling
+try:
+    from src.embedding.gemini import GeminiEmbedder
+except ImportError:
+    GeminiEmbedder = None
 
 
 class TextChunker:
@@ -21,6 +34,8 @@ class TextChunker:
             chunk_overlap=self.overlap,
             separators=self.separators
         )
+        
+        self.embedder = GeminiEmbedder() if GeminiEmbedder else None
 
     def _clean_text(self, text: str) -> str:
         """
@@ -86,6 +101,17 @@ class TextChunker:
                 continue  # Skip empty or whitespace-only text
 
             text_chunks = self.split_text(raw_text)
+            
+            # Use Gemini API to get actual token counts if embedder is available
+            token_counts = []
+            if self.embedder:
+                try:
+                    token_counts = self.embedder.count_tokens(text_chunks)
+                except Exception as e:
+                    logger.warning("token_counting_failed", error=str(e), fallback="char_length_division")
+                    token_counts = [len(c) // 4 for c in text_chunks]
+            else:
+                token_counts = [len(c) // 4 for c in text_chunks]
 
             for index, chunk_text in enumerate(text_chunks):
                 all_processed_chunks.append({
@@ -93,7 +119,7 @@ class TextChunker:
                     "chunk_index": index,
                     "source_url": url,
                     "content": chunk_text,
-                    "token_estimate": len(chunk_text) // 4  # Rough estimate: 1 token ≈ 4 characters
+                    "token_count": token_counts[index]
                 })
         return all_processed_chunks
     

@@ -5,15 +5,33 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import google.genai as genai
-from src.config.settings import settings
+from src.config.settings import get_settings
+from src.config.logger import get_logger
 from tenacity import retry, wait_exponential, stop_after_attempt
 
-# Initialize the Client once
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+logger = get_logger(__name__)
 
 class GeminiEmbedder:
-    def __init__(self, model_name: str = settings.EMBEDDING_MODEL):
-        self.model_name = model_name
+    def __init__(self, model_name: str | None = None):
+        settings = get_settings()
+        self.model_name = model_name or settings.EMBEDDING_MODEL
+        # Initialize the Client lazily per-instance to allow tests to run without API keys
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+    def count_tokens(self, texts: list[str]) -> list[int]:
+        """Gets exact token counts for a list of texts using the Gemini API.
+        
+        Because count_tokens groups all items into a single total, we process
+        each text individually to get chunk-specific counts.
+        """
+        counts = []
+        for text in texts:
+            response = self.client.models.count_tokens(
+                model=self.model_name,
+                contents=[text]
+            )
+            counts.append(response.total_tokens)
+        return counts
 
     @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(5))
     def _embed_single_batch(self, texts: list[str]) -> list[list[float]]:
@@ -21,11 +39,20 @@ class GeminiEmbedder:
         
         It handles network instability and rate limits via exponential backoff.
         """
-        response = client.models.embed_content(model=self.model_name, contents=texts)
-        # Assuming the new SDK returns an object with embeddings
-        return [e.values for e in response.embeddings]
+        logger.debug("embedding_batch_request", batch_size=len(texts))
+        
+        # In current Google GenAI SDK, we need to pass each string as a separate embed_content call
+        # or use specific batch parameters if supported. 
+        # For a robust approach with the current SDK:
+        embeddings = []
+        for text in texts:
+            response = self.client.models.embed_content(model=self.model_name, contents=text)
+            # Each response.embeddings is a list with one item for a single content
+            embeddings.append(response.embeddings[0].values)
+            
+        return embeddings
 
-    def generate_embeddings(self, chunks: list[str], batch_size: int = 100) -> list[list[float]]:
+    def generate_embeddings(self, chunks: list[str], batch_size: int = 20) -> list[list[float]]:
         """Generates embeddings for a list of text chunks in batches."""
         if batch_size <= 0:
              raise ValueError("batch_size must be a positive integer")

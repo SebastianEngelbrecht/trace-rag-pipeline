@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Enterprise RAG Pipeline</title>
+    <!-- Add basic styling or link to a CSS framework like Tailwind or Bootstrap -->
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        .container { display: flex; gap: 20px; }
+        .dashboard, .playground { flex: 1; border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
+        .log-area { background: #1e1e1e; color: #0f0; padding: 10px; height: 200px; overflow-y: auto; font-family: monospace; }
+        .chat-area { height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; margin-bottom: 10px; }
+        .chunk-card { border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 4px; font-size: 0.9em; background: #f9f9f9; }
+        .accordion { cursor: pointer; padding: 10px; width: 100%; text-align: left; background-color: #eee; border: none; outline: none; transition: 0.4s; }
+        .active, .accordion:hover { background-color: #ccc; }
+        .panel { padding: 0 18px; display: none; background-color: white; overflow: hidden; }
+        .developer-mode { border: 1px dashed orange; padding: 10px; background: #fffcf0; display: none; white-space: pre-wrap; font-family: monospace; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <h1>Enterprise RAG Control Center</h1>
+    <div class="container">
+        <!-- Ingestion Dashboard -->
+        <div class="dashboard">
+            <h2>1. Ingestion Dashboard</h2>
+            <div>
+                <label>Target URL:</label>
+                <input type="text" id="crawlUrl" placeholder="https://example.com" value="https://detsundekoekken.dk">
+                <button onclick="startCrawl()">Start Ingestion</button>
+            </div>
+            
+            <div style="margin-top: 15px;">
+                <label>Chunk Size: <span id="chunkSizeVal">500</span></label>
+                <input type="range" id="chunkSize" min="100" max="2000" value="500" oninput="document.getElementById('chunkSizeVal').innerText=this.value">
+                <br>
+                <label>Overlap: <span id="overlapVal">50</span></label>
+                <input type="range" id="overlap" min="0" max="500" value="50" oninput="document.getElementById('overlapVal').innerText=this.value">
+            </div>
+
+            <div style="margin-top: 15px;">
+                <label>Live Logs:</label>
+                <div id="logArea" class="log-area"></div>
+            </div>
+        </div>
+
+        <!-- Playground -->
+        <div class="playground">
+            <h2>2. RAG Playground</h2>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <div>
+                    <label>Top K:</label>
+                    <input type="number" id="topK" value="5" min="1" max="20" style="width: 50px;">
+                </div>
+                <div>
+                    <label>Developer Mode:</label>
+                    <input type="checkbox" id="devMode" onchange="toggleDevMode()">
+                </div>
+            </div>
+
+            <div id="chatArea" class="chat-area"></div>
+            
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="questionInput" placeholder="Ask a question..." style="flex: 1;" onkeypress="if(event.key === 'Enter') askQuestion()">
+                <button onclick="askQuestion()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+
+        function startCrawl() {
+            const url = document.getElementById('crawlUrl').value;
+            const chunkSize = document.getElementById('chunkSize').value;
+            const overlap = document.getElementById('overlap').value;
+            const logArea = document.getElementById('logArea');
+            logArea.innerHTML = ''; // Clear logs
+
+            if (ws) ws.close();
+            // Assuming default host/port for FastAPI
+            ws = new WebSocket(`ws://${window.location.host}/ws/ingest`);
+            
+            ws.onopen = () => {
+                logArea.innerHTML += `[INIT] Connecting to crawler for ${url}...\n`;
+                ws.send(JSON.stringify({
+                    url: url,
+                    chunk_size: parseInt(chunkSize),
+                    overlap: parseInt(overlap),
+                    max_depth: 1 // Keep small for demo
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                logArea.innerHTML += `[LOG] ${data.message}\n`;
+                logArea.scrollTop = logArea.scrollHeight;
+                
+                if(data.status === 'complete') {
+                     logArea.innerHTML += `[SUCCESS] Ingestion complete.\n`;
+                     ws.close();
+                }
+            };
+        }
+
+        async function askQuestion() {
+            const question = document.getElementById('questionInput').value;
+            if (!question) return;
+            
+            const topK = document.getElementById('topK').value;
+            const chatArea = document.getElementById('chatArea');
+            const isDevMode = document.getElementById('devMode').checked;
+
+            // Add user question
+            chatArea.innerHTML += `<div style="text-align: right; margin: 10px 0;"><strong>You:</strong> ${question}</div>`;
+            document.getElementById('questionInput').value = '';
+
+            try {
+                const response = await fetch('/query/advanced', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: question, top_k: parseInt(topK) })
+                });
+
+                const data = await response.json();
+                
+                let statsHtml = `<div style="font-size: 0.8em; color: #666; margin-bottom: 5px;">
+                                    ⏱️ Generation: ${data.response_time_ms}ms | 🪙 Tokens used: ${data.tokens_used}
+                                 </div>`;
+
+                let responseHtml = `<div style="text-align: left; margin: 10px 0;">
+                                        <strong>AI:</strong> ${data.answer.replace(/\\n/g, '<br>')}
+                                        ${statsHtml}
+                                    </div>`;
+                
+                // Add accordion for Vector DB inspection
+                if (data.chunks && data.chunks.length > 0) {
+                    responseHtml += `
+                        <button class="accordion" onclick="this.classList.toggle('active'); var panel = this.nextElementSibling; if (panel.style.display === 'block') { panel.style.display = 'none'; } else { panel.style.display = 'block'; }">
+                            🔍 Inspecting Vector DB (${data.chunks.length} chunks retrieved)
+                        </button>
+                        <div class="panel">
+                    `;
+                    data.chunks.forEach((chunk, i) => {
+                        responseHtml += `
+                            <div class="chunk-card">
+                                <strong>Source:</strong> <a href="${chunk.source_url}" target="_blank">${chunk.source_url}</a> (Index: ${chunk.chunk_index})<br>
+                                <em>Content snippet:</em> ${chunk.content.substring(0, 150)}...
+                            </div>
+                        `;
+                    });
+                    responseHtml += `</div>`;
+                }
+
+                // Add prompt inspector
+                const devModeStyle = isDevMode ? "display: block;" : "display: none;";
+                if (data.prompt) {
+                     responseHtml += `
+                        <div class="developer-mode" style="${devModeStyle}">
+                            <strong>Raw Template Prompt Sent:</strong><br>
+                            ${data.prompt.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+                        </div>
+                     `;
+                }
+
+                chatArea.innerHTML += responseHtml;
+                chatArea.scrollTop = chatArea.scrollHeight;
+
+            } catch (error) {
+                 chatArea.innerHTML += `<div style="color: red;">Error: ${error.message}</div>`;
+            }
+        }
+
+        function toggleDevMode() {
+            const devBoxes = document.getElementsByClassName('developer-mode');
+            const isChecked = document.getElementById('devMode').checked;
+            for(let box of devBoxes) {
+                box.style.display = isChecked ? 'block' : 'none';
+            }
+        }
+    </script>
+</body>
+</html>

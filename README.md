@@ -13,78 +13,92 @@ This complete ingestion and retrieval pipeline supports the following capabiliti
 - **Text Chunking:** Cleaning and chunking of text using LangChain recursive text splitters
 - **Embeddings:** Generating embeddings using the native `google-genai` Gemini Client
 - **Vector Store:** Local persistence of embeddings and metadata using ChromaDB
+- **LLM Generation:** Injecting searched context into Gemini models using the `genai` SDK
 - **REST API:** A FastAPI backend allowing background initiation of crawl jobs, and searching your vector store.
+- **Structured Logging:** Centralized structlog configuration emitting structured logs (ConsoleRenderer by default; JSON rendering can be enabled for service deployments).
 
 ## Architecture & Project Structure
 
-The project encompasses tools for both offline data ingestion and live querying:
+The project encompasses tools for both offline data ingestion and live querying handled through a unified FastAPI application. See more details in the [Architecture & Guide](docs/GUIDE.md).
 
 ```text
 src/
-  main.py                  Standalone testing script for the full pipeline
+  main.py                  Application entry point for the FastAPI server
   api/
-    app.py                 FastAPI server entry point
-    routes.py              REST endpoints for crawling and querying
+    routes.py              FastAPI REST endpoints and WebSocket ingestion logic
+    templates/
+      index.html           Interactive web dashboard UI
   config/
     settings.py            Pydantic settings loading from `.env`
+    logger.py              Structlog structured logging configuration
   database/
     chroma_manager.py      ChromaDB vector store integration
   embedding/
     gemini.py              Batch embedding generation
+  generation/
+    engine.py              Retrieval-Augmented Generation execution logic
   ingestion/
     crawler.py             Async Playwright crawler
     chunker.py             Text cleaning and chunk generation
+Makefile                   Developer execution shortcuts
+docker-compose.yml         Container orchestration configuration
+Dockerfile                 Production image build instruction
 ```
 
 For more details on the design, see the documentation in `docs/`.
 
 ## Requirements
 
-- Python 3.12+
+- Docker and Docker Compose (Recommended for isolated execution)
+- Python 3.12+ (For local development)
 - `uv` for environment and dependency management
 - Playwright browser binaries for crawling
 - A Gemini API Key
 
-## Setup
+## Setup & Execution
 
-First, initialize the environment and install dependencies using `uv`:
+### Option 1: Docker (Recommended)
 
+1. Create a `.env` file in the root of the project with your API keys:
+   ```env
+   GEMINI_API_KEY="your_api_key_here"
+   LOG_LEVEL="INFO" 
+   ```
+2. Build and start the containerized backend:
+   ```bash
+   make build
+   make up
+   ```
+   The FastAPI server will now be running on `http://127.0.0.1:8000/docs`, and the local `data/` directory will mount persistently for ChromaDB.
+
+### Option 2: Local Development
+
+First, initialize the environment and install dependencies using `uv` via the provided Makefile command:
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
+make install
 ```
-
-Next, ensure Playwright browsers are installed:
-
-```bash
-uv run playwright install
-```
+*(This triggers `uv sync` and installs the required chromium browser for the crawler.)*
 
 Finally, define your environment variables. Create a `.env` file in the root of the project:
 
 ```env
 GEMINI_API_KEY="your_api_key_here"
+LOG_LEVEL="INFO" # Optional: DEBUG, INFO, WARNING, ERROR
 ```
 
 ## Usage
 
-### Using the REST API
+### Using the Web UI Dashboard
 
-The recommended way to interact with the system is via the FastAPI backend. Start the server:
-
-```bash
-uv run uvicorn src.api.routes:app --reload
-```
-
-The API will run locally at `http://0.0.0.0:8000`. You can visit `http://127.0.0.1:8000/docs` to interact with the auto-generated Swagger UI.
-
-### Running a Pipeline Test Script
-
-If you want to invoke a quick pipeline smoke test from the CLI (crawls 'example.com', chunks, embeds, and saves to the database), run:
+The recommended way to interact with the system is via the FastAPI backend and its included UI application. Start the local server with live-reloading:
 
 ```bash
-uv run python src/main.py
+make dev
 ```
+
+The Web UI dashboard will run locally at `http://localhost:8000/`. You can visit `http://localhost:8000/docs` to interact with the auto-generated API Swagger documentation.
+
+For complete details on using the interactive UI, executing crawl pipelines, and running RAG requests, refer to the [System Guide](docs/GUIDE.md).
 
 ## Contributing
 

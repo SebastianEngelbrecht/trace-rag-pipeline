@@ -16,4 +16,11 @@ dependencies = [
     "chromadb>=0.4.24",
     "fastapi>=0.110.0",
     "uvicorn>=0.29.0",
+    "structlog>=26.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
 ]
