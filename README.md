@@ -35,31 +35,44 @@ src/
   ingestion/
     crawler.py             Async Playwright crawler
     chunker.py             Text cleaning and chunk generation
+Makefile                   Developer execution shortcuts
+docker-compose.yml         Container orchestration configuration
+Dockerfile                 Production image build instruction
 ```
 
 For more details on the design, see the documentation in `docs/`.
 
 ## Requirements
 
-- Python 3.12+
+- Docker and Docker Compose (Recommended for isolated execution)
+- Python 3.12+ (For local development)
 - `uv` for environment and dependency management
 - Playwright browser binaries for crawling
 - A Gemini API Key
 
-## Setup
+## Setup & Execution
 
-First, initialize the environment and install dependencies using `uv`:
+### Option 1: Docker (Recommended)
 
+1. Create a `.env` file in the root of the project with your API keys:
+   ```env
+   GEMINI_API_KEY="your_api_key_here"
+   LOG_LEVEL="INFO" 
+   ```
+2. Build and start the containerized backend:
+   ```bash
+   make build
+   make up
+   ```
+   The FastAPI server will now be running on `http://127.0.0.1:8000/docs`, and the local `data/` directory will mount persistently for ChromaDB.
+
+### Option 2: Local Development
+
+First, initialize the environment and install dependencies using `uv` via the provided Makefile command:
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
+make install
 ```
-
-Next, ensure Playwright browsers are installed:
-
-```bash
-uv run playwright install
-```
+*(This triggers `uv sync` and installs the required chromium browser for the crawler.)*
 
 Finally, define your environment variables. Create a `.env` file in the root of the project:
 
@@ -72,10 +85,10 @@ LOG_LEVEL="INFO" # Optional: DEBUG, INFO, WARNING, ERROR
 
 ### Using the REST API
 
-The recommended way to interact with the system is via the FastAPI backend. Start the server:
+The recommended way to interact with the system is via the FastAPI backend. You can use the Makefile to start the local server with live-reloading:
 
 ```bash
-uv run uvicorn src.api.routes:app --reload
+make dev
 ```
 
 The API will run locally at `http://0.0.0.0:8000`. You can visit `http://127.0.0.1:8000/docs` to interact with the auto-generated Swagger UI.
@@ -85,7 +98,7 @@ The API will run locally at `http://0.0.0.0:8000`. You can visit `http://127.0.0
 If you want to invoke a quick pipeline smoke test from the CLI (crawls 'example.com', chunks, embeds, and saves to the database), run:
 
 ```bash
-uv run python src/main.py
+make run
 ```
 
 ## Contributing

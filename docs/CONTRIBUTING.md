@@ -11,11 +11,10 @@ We welcome contributions to the Trace RAG Pipeline project! This document provid
    ```
 
 2. **Set up the environment with `uv`:**
-   We strictly use `uv` for package management and environment isolation. Ensure it is installed.
+   We heavily use `make` execution shortcuts. Ensure `uv` is installed, then run the installer:
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
-   uv sync
-   uv run playwright install
+   make install
    ```
 
 3. **Configure Environment Variables:**
@@ -31,6 +30,7 @@ We welcome contributions to the Trace RAG Pipeline project! This document provid
 
 ## Development Guidelines
 
+- **Docker:** Familiarize yourself with the Docker architecture. While you can develop locally via `make dev`, the system is ultimately built around `docker-compose.yml`.
 - **Logging:** Use the project's structured logger (`from src.config.logger import get_logger`) instead of `print()` statements for any console output.
 - **Formatting & Linting:** Please ensure your code follows standard PEP 8 styling conventions. We recommend using `ruff` or `black` for formatting before opening a PR.
 - **Dependency Management:** Whenever adding a new dependency, please add it strictly via `pyproject.toml` and use `uv sync` to lock dependencies.
@@ -39,7 +39,7 @@ We welcome contributions to the Trace RAG Pipeline project! This document provid
 ## Pull Request Process
 
 1. Create a descriptive branch name (`feature/add-new-embedder` or `bugfix/fix-chunking-error`).
-2. Ensure you have tested your code locally using the `src/main.py` entry point.
+2. Ensure you have tested your code locally using the `make run` pipeline entry point.
 3. If new REST endpoints were added, please update the main `README.md` and/or any architecture documentation in `/docs`.
 4. Open a pull request against the `main` branch. Provide clear details on what was fixed or implemented.
 
