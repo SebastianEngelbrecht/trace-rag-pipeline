@@ -1,87 +1,91 @@
-# trace-rag-pipeline
+# Trace RAG Pipeline
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/uv-fast-magenta.svg)](https://docs.astral.sh/uv/)
 
-Prototype ingestion pipeline for a Retrieval-Augmented Generation workflow, centered on crawling web content, splitting text into chunks, and preparing content for Gemini embeddings.
+Prototype ingestion pipeline for a Retrieval-Augmented Generation workflow. This robust backend crawls web content, splits text into chunks, generates Gemini embeddings, and allows for vector similarity searches against a persistent ChromaDB instance. 
 
 ## Overview
 
-This repository is an early-stage RAG pipeline project. The implemented pieces focus on ingestion:
+This complete ingestion and retrieval pipeline supports the following capabilities:
 
-- Crawling site content with Playwright
-- Cleaning and chunking extracted text with LangChain text splitters
-- Generating embeddings through Gemini
+- **Web Crawling:** Concurrent extraction of text from target sites Using Playwright
+- **Text Chunking:** Cleaning and chunking of text using LangChain recursive text splitters
+- **Embeddings:** Generating embeddings using the native `google-genai` Gemini Client
+- **Vector Store:** Local persistence of embeddings and metadata using ChromaDB
+- **REST API:** A FastAPI backend allowing background initiation of crawl jobs, and searching your vector store.
 
-The application entry point is still minimal, and the vector-store integration is not implemented yet.
+## Architecture & Project Structure
 
-## Current Status
-
-What exists today:
-
-- A concurrent crawler for collecting page text
-- A chunking layer for converting crawled content into embedding-ready records
-- A Gemini embedding utility for batched vector generation
-
-What is not wired yet:
-
-- A complete end-to-end pipeline entry point
-- Persistent vector database storage
-- API endpoints
-
-## Project Structure
+The project encompasses tools for both offline data ingestion and live querying:
 
 ```text
 src/
-  main.py                  Minimal application entry point
-  config/                  Project configuration
-  database/                Future vector-store integration
-  embedding/               Gemini embedding utilities
+  main.py                  Standalone testing script for the full pipeline
+  api/
+    app.py                 FastAPI server entry point
+    routes.py              REST endpoints for crawling and querying
+  config/
+    settings.py            Pydantic settings loading from `.env`
+  database/
+    chroma_manager.py      ChromaDB vector store integration
+  embedding/
+    gemini.py              Batch embedding generation
   ingestion/
     crawler.py             Async Playwright crawler
     chunker.py             Text cleaning and chunk generation
 ```
+
+For more details on the design, see the documentation in `docs/`.
 
 ## Requirements
 
 - Python 3.12+
 - `uv` for environment and dependency management
 - Playwright browser binaries for crawling
+- A Gemini API Key
 
 ## Setup
 
-Install dependencies:
+First, initialize the environment and install dependencies using `uv`:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
-Install Playwright browsers:
+Next, ensure Playwright browsers are installed:
 
 ```bash
 uv run playwright install
 ```
 
+Finally, define your environment variables. Create a `.env` file in the root of the project:
+
+```env
+GEMINI_API_KEY="your_api_key_here"
+```
+
 ## Usage
 
-The repository does not yet expose a complete top-level pipeline command. The current entry point is a stub:
+### Using the REST API
+
+The recommended way to interact with the system is via the FastAPI backend. Start the server:
+
+```bash
+uv run python src/api/app.py
+```
+
+The API will run locally at `http://0.0.0.0:8000`. You can visit `http://127.0.0.1:8000/docs` to interact with the auto-generated Swagger UI.
+
+### Running a Pipeline Test Script
+
+If you want to invoke a quick pipeline smoke test from the CLI (crawls 'example.com', chunks, embeds, and saves to the database), run:
 
 ```bash
 uv run python src/main.py
 ```
 
-At the moment, the most practical way to exercise the project locally is by running the ingestion modules directly while the main pipeline is being assembled.
+## Contributing
 
-## Development Notes
-
-- The repo is currently organized around ingestion first, orchestration later.
-- Expect the main workflow to evolve as database persistence and pipeline wiring are added.
-- The empty [docs](docs) directory is available for future architecture notes, examples, or operational guides.
-
-## Roadmap
-
-- Wire the crawler, chunker, and embedding steps together from a real entry point
-- Add vector-store persistence
-- Add tests and smoke checks for the ingestion path
-- Document configuration and example runs
+For guidelines on how to contribute to this repository, please see our [Contributing Guide](docs/CONTRIBUTING.md).

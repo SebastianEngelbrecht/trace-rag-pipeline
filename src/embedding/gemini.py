@@ -1,9 +1,15 @@
-import google.generativeai as genai
+import sys
+from pathlib import Path
+
+# Add project root to Python path so 'src' can be imported when running as a script
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
+import google.genai as genai
 from src.config.settings import settings
 from tenacity import retry, wait_exponential, stop_after_attempt
 
-# Configure the API key once when the module loads
-genai.configure(api_key=settings.GEMINI_API_KEY)
+# Initialize the Client once
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 class GeminiEmbedder:
     def __init__(self, model_name: str = settings.EMBEDDING_MODEL):
@@ -15,9 +21,9 @@ class GeminiEmbedder:
         
         It handles network instability and rate limits via exponential backoff.
         """
-        response = genai.embed_content(model=self.model_name, content=texts)
-        # For a list of texts, the response dict contains an 'embedding' key mapping to a list of vectors
-        return response['embedding']
+        response = client.models.embed_content(model=self.model_name, contents=texts)
+        # Assuming the new SDK returns an object with embeddings
+        return [e.values for e in response.embeddings]
 
     def generate_embeddings(self, chunks: list[str], batch_size: int = 100) -> list[list[float]]:
         """Generates embeddings for a list of text chunks in batches."""
@@ -29,3 +35,11 @@ class GeminiEmbedder:
             embeddings = self._embed_single_batch(batch)
             all_embeddings.extend(embeddings)
         return all_embeddings
+    
+
+if __name__ == "__main__":
+    # Example usage
+    embedder = GeminiEmbedder()
+    sample_texts = ["Hello world!", "This is a test.", "Embedding generation with Gemini API."]
+    embeddings = embedder.generate_embeddings(sample_texts, batch_size=2)
+    print(f"Generated embeddings for {len(sample_texts)} texts.")

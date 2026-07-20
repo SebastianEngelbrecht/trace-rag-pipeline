@@ -1,1 +1,70 @@
-"""Placeholder module for future Chroma persistence integration."""
+import sys
+from pathlib import Path
+
+# Add project root to Python path so 'src' can be imported when running as a script
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
+import chromadb
+from chromadb.config import Settings as ChromaSettings
+from src.config.settings import settings
+
+class ChromaManager:
+    def __init__(self, collection_name: str = "rag_collection"):
+        """Initialize ChromaDB client and collection."""
+        self.persist_directory = str(Path(settings.CHROMA_DB_DIR).resolve())
+        self.collection_name = collection_name
+        
+        # Initialize a persistent client
+        self.client = chromadb.PersistentClient(path=self.persist_directory)
+        
+        # Get or create the collection
+        self.collection = self.client.get_or_create_collection(
+            name=self.collection_name,
+            metadata={"hnsw:space": "cosine"} # Use cosine similarity
+        )
+
+    def add_chunks(self, chunks: list[dict], embeddings: list[list[float]]):
+        """Adds text chunks and their embeddings to ChromaDB."""
+        if not chunks or not embeddings:
+            return
+            
+        if len(chunks) != len(embeddings):
+            raise ValueError(f"Number of chunks ({len(chunks)}) must match number of embeddings ({len(embeddings)})")
+
+        ids = [chunk["chunk_id"] for chunk in chunks]
+        documents = [chunk["content"] for chunk in chunks]
+        metadatas = [
+            {
+                "source_url": chunk.get("source_url", ""),
+                "chunk_index": chunk.get("chunk_index", 0),
+                "token_estimate": chunk.get("token_estimate", 0)
+            }
+            for chunk in chunks
+        ]
+
+        self.collection.add(
+            ids=ids,
+            embeddings=embeddings,
+            documents=documents,
+            metadatas=metadatas
+        )
+
+    def query(self, query_embeddings: list[list[float]], n_results: int = 5):
+        """Queries the collection using embeddings."""
+        return self.collection.query(
+            query_embeddings=query_embeddings,
+            n_results=n_results
+        )
+
+    def peek(self, limit: int = 5):
+        """Returns a few items from the collection to verify it's working."""
+        return self.collection.peek(limit=limit)
+
+    def count(self):
+        """Returns the total number of items in the collection."""
+        return self.collection.count()
+
+if __name__ == "__main__":
+    manager = ChromaManager()
+    print(f"ChromaDB initialized at: {manager.persist_directory}")
+    print(f"Collection count: {manager.count()}")
