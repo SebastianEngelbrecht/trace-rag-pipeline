@@ -23,8 +23,7 @@ The project encompasses tools for both offline data ingestion and live querying:
 src/
   main.py                  Standalone testing script for the full pipeline
   api/
-    app.py                 FastAPI server entry point
-    routes.py              REST endpoints for crawling and querying
+    routes.py              FastAPI server entry point & REST endpoints
   config/
     settings.py            Pydantic settings loading from `.env`
   database/

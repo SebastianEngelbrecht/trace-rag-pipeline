@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     CHAT_MODEL: str = "gemini-3.1-flash-lite"
     
     # Vector Database Configuration
-    CHROMA_DB_DIR: str = "./chroma_store"
+    # TODO: Currently using local disk storage for testing & prototyping.
+    # After testing is complete and we need to scale, migrate to a managed vector DB like Pinecone.
+    CHROMA_DB_DIR: str = str(ROOT_DIR / "data" / "knowledge_base")
     
     # Crawler Configuration
     MAX_CRAWL_DEPTH: int = 3

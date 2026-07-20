@@ -60,7 +60,7 @@ class AsyncCrawler:
         except Exception:
             return False
 
-    async def _worker(self, queue: asyncio.Queue, context):
+    async def _worker(self, queue: asyncio.Queue, context, out_queue: asyncio.Queue = None):
         """Worker instance designed to process queue segments concurrently."""
         while True:
             url, depth = await queue.get()
@@ -81,8 +81,11 @@ class AsyncCrawler:
                 # Extract page details
                 text_content = await page.evaluate("document.body.innerText")
                 
-                async with self.lock:
-                    self.results[url] = text_content
+                if out_queue:
+                    await out_queue.put((url, text_content))
+                else:
+                    async with self.lock:
+                        self.results[url] = text_content
 
                 # Discover downstream page anchors
                 hrefs = await page.eval_on_selector_all("a", "elements => elements.map(el => el.href)")
@@ -101,7 +104,7 @@ class AsyncCrawler:
                 await page.close()
                 queue.task_done()
 
-    async def crawl(self):
+    async def crawl(self, out_queue: asyncio.Queue = None):
         """Main orchestrator utilizing a concurrent worker execution loop."""
         async with async_playwright() as p:
             # Optimize memory utilization by disabling features unnecessary for text retrieval
@@ -119,7 +122,7 @@ class AsyncCrawler:
             
             # Fire up parallel workers up to max_concurrency ceiling
             workers = [
-                asyncio.create_task(self._worker(queue, context)) 
+                asyncio.create_task(self._worker(queue, context, out_queue)) 
                 for _ in range(self.max_concurrency)
             ]
             

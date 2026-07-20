@@ -36,7 +36,7 @@ class ChromaManager:
             {
                 "source_url": chunk.get("source_url", ""),
                 "chunk_index": chunk.get("chunk_index", 0),
-                "token_estimate": chunk.get("token_estimate", 0)
+                "token_count": chunk.get("token_count", 0)
             }
             for chunk in chunks
         ]

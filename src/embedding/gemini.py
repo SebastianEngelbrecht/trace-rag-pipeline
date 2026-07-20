@@ -15,6 +15,21 @@ class GeminiEmbedder:
     def __init__(self, model_name: str = settings.EMBEDDING_MODEL):
         self.model_name = model_name
 
+    def count_tokens(self, texts: list[str]) -> list[int]:
+        """Gets exact token counts for a list of texts using the Gemini API.
+        
+        Because count_tokens groups all items into a single total, we process
+        each text individually to get chunk-specific counts.
+        """
+        counts = []
+        for text in texts:
+            response = client.models.count_tokens(
+                model=self.model_name,
+                contents=[text]
+            )
+            counts.append(response.total_tokens)
+        return counts
+
     @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(5))
     def _embed_single_batch(self, texts: list[str]) -> list[list[float]]:
         """Embeds a single batch of text using the Gemini API.

@@ -12,39 +12,91 @@ from src.ingestion.chunker import TextChunker
 from src.embedding.gemini import GeminiEmbedder
 from src.database.chroma_manager import ChromaManager
 
-async def run_pipeline():
-    print("🚀 Starting RAG Pipeline...")
-    
-    # 1. Crawl
-    print("\n🕸️ Crawling data...")
-    crawler = AsyncCrawler("https://www.example.com", max_depth=1)
-    # Just crawl a small example for testing
-    crawled_data = await crawler.crawl()
-    print(f"Crawled {len(crawled_data)} pages.")
-    
-    # 2. Chunk
-    print("\n✂️ Chunking text...")
-    chunker = TextChunker()
-    chunks = chunker.process_crawled_data(crawled_data)
-    print(f"Generated {len(chunks)} chunks.")
-    
-    if not chunks:
-        print("No chunks generated. Exiting.")
-        return
+async def chunking_worker(page_queue: asyncio.Queue, chunk_queue: asyncio.Queue, chunker: TextChunker):
+    """
+    Worker task that continuously reads raw crawled pages from `page_queue`,
+    splits them into chunks using the `chunker`, and places the chunks into `chunk_queue`.
+    It shuts down when it receives a `None` sentinel value.
+    """
+    while True:
+        item = await page_queue.get()
+        if item is None: # Sentinel value indicates crawling is done
+            await chunk_queue.put(None) # Pass sentinel to the next worker
+            page_queue.task_done()
+            break
         
-    # 3. Embed
-    print("\n🧠 Generating embeddings...")
-    embedder = GeminiEmbedder()
-    chunk_texts = [c["content"] for c in chunks]
-    embeddings = embedder.generate_embeddings(chunk_texts)
-    print(f"Generated {len(embeddings)} embeddings.")
+        url, text = item
+        # Chunking a single page dictionary
+        chunks = chunker.process_crawled_data({url: text})
+        for chunk in chunks:
+            await chunk_queue.put(chunk)
+        
+        page_queue.task_done()
+
+async def embedding_worker(chunk_queue: asyncio.Queue, embedder: GeminiEmbedder, db_manager: ChromaManager, batch_size: int = 20):
+    """
+    Worker task that reads parsed chunks from `chunk_queue`, batches them, 
+    generates embeddings using the Gemini API, and stores them in ChromaDB.
+    Batches are processed asynchronously using a thread pool to avoid blocking the event loop.
+    """
+    batch = []
+    loop = asyncio.get_running_loop()
     
-    # 4. Store in ChromaDB
-    print("\n💾 Storing in ChromaDB...")
+    async def process_batch(current_batch):
+        """Helper to compute embeddings and save a single batch to the DB."""
+        if not current_batch: return
+        chunk_texts = [c["content"] for c in current_batch]
+        # Run sync methods in thread pool to not block asyncio event loop
+        embeddings = await loop.run_in_executor(None, embedder.generate_embeddings, chunk_texts)
+        await loop.run_in_executor(None, db_manager.add_chunks, current_batch, embeddings)
+        print(f"💾 Stored batch of {len(current_batch)} chunks. Total in DB: {db_manager.count()}")
+
+    while True:
+        item = await chunk_queue.get()
+        if item is None: # Sentinel value indicates no more chunks are coming
+            await process_batch(batch) # Flush any remaining items in the buffer
+            chunk_queue.task_done()
+            break
+            
+        batch.append(item)
+        if len(batch) >= batch_size:
+            await process_batch(batch)
+            batch = []
+            
+        chunk_queue.task_done()
+
+async def run_pipeline():
+    """
+    Sets up and executes the asynchronous streaming RAG pipeline.
+    It links a producer (the web crawler) with consumers (chunker and embedder workers)
+    using asyncio queues.
+    """
+    print("🚀 Starting Streaming RAG Pipeline...")
+    
+    page_queue = asyncio.Queue()
+    chunk_queue = asyncio.Queue()
+    
+    crawler = AsyncCrawler("https://detsundekoekken.dk", max_depth=1)
+    chunker = TextChunker()
+    embedder = GeminiEmbedder()
     db_manager = ChromaManager()
-    db_manager.add_chunks(chunks, embeddings)
-    print(f"Successfully stored in ChromaDB. Total items in DB: {db_manager.count()}")
-    print(f"Pipeline completed successfully! ✅")
+    
+    # Start consumers
+    chunk_task = asyncio.create_task(chunking_worker(page_queue, chunk_queue, chunker))
+    embed_task = asyncio.create_task(embedding_worker(chunk_queue, embedder, db_manager, batch_size=20))
+    
+    # Start producer
+    print("\n🕸️ Crawling data & streaming to chunker...")
+    await crawler.crawl(out_queue=page_queue)
+    
+    # Signal workers to finish
+    print("\n🏁 Crawl complete. Waiting for remaining chunks to process...")
+    await page_queue.put(None)
+    
+    await chunk_task
+    await embed_task
+    
+    print(f"\n✅ Pipeline completed successfully! Final DB Count: {db_manager.count()}")
 
 def main():
     asyncio.run(run_pipeline())
