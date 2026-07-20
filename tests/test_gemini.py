@@ -35,8 +35,8 @@ def test_embed_single_batch(mocked_embedder):
     
     # Assert network was 'called' once
     mock_client.models.embed_content.assert_called_once_with(
-        model=embedder.model_name, 
-        contents=texts
+        model=embedder.model_name,
+        contents="Test string",
     )
     
     # Assert it returns the correctly mocked vector structure
