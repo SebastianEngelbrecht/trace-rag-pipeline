@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 """Application entry point for the trace RAG pipeline."""
 
 import asyncio
-from src.ingestion.crawler import WebCrawler
+from src.ingestion.crawler import AsyncCrawler
 from src.ingestion.chunker import TextChunker
 from src.embedding.gemini import GeminiEmbedder
 from src.database.chroma_manager import ChromaManager
