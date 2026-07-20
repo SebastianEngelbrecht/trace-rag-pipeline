@@ -78,3 +78,5 @@ if __name__ == "__main__":
     manager = ChromaManager()
     print(f"ChromaDB initialized at: {manager.persist_directory}")
     print(f"Collection count: {manager.count()}")
+
+# Make sure that I do a hybrid search with vector retriever and BM25 retriever. The vector retriever will use the embeddings to find similar chunks, while the BM25 retriever will use keyword matching to find relevant chunks. This way, we can combine the strengths of both methods for better retrieval performance.

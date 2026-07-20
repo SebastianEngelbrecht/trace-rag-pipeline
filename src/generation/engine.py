@@ -5,7 +5,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import google.genai as genai
-from typing import AsyncGenerator, List, Dict
 from src.config.settings import get_settings
 from src.config.logger import get_logger
 from src.embedding.gemini import GeminiEmbedder

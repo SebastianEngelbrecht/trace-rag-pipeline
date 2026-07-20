@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 try:
     from src.embedding.gemini import GeminiEmbedder
 except ImportError:
-    pass
+    GeminiEmbedder = None
 
 
 class TextChunker:
@@ -35,10 +35,7 @@ class TextChunker:
             separators=self.separators
         )
         
-        try:
-            self.embedder = GeminiEmbedder()
-        except NameError:
-            self.embedder = None
+        self.embedder = GeminiEmbedder() if GeminiEmbedder else None
 
     def _clean_text(self, text: str) -> str:
         """
