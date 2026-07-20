@@ -76,7 +76,7 @@ async def websocket_ingest(websocket: WebSocket):
             async def process_batch(current_batch):
                 if not current_batch: return
                 chunk_texts = [c["content"] for c in current_batch]
-                embeddings = await loop.run_in_executor(None, engine.embedder.generate_embeddings, chunk_texts)
+                embeddings = await loop.run_in_executor(None, engine.embeddings.embed_documents, chunk_texts)
                 await loop.run_in_executor(None, engine.db.add_chunks, current_batch, embeddings)
                 stats["embedded"] += len(current_batch)
                 await websocket.send_json({"status": "running", "message": f"Indexed batch of {len(current_batch)} chunks. Total indexed: {stats['embedded']}"})
