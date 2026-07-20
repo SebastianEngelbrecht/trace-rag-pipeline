@@ -22,7 +22,7 @@ def main():
         "src.api.routes:app", 
         host="0.0.0.0", 
         port=8000, 
-        reload=settings.DEBUG if hasattr(settings, 'DEBUG') else False
+        reload=False
     )
 
 if __name__ == "__main__":
