@@ -5,7 +5,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import chromadb
-from chromadb.config import Settings as ChromaSettings
 from src.config.settings import settings
 
 class ChromaManager:
