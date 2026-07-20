@@ -195,7 +195,8 @@ async def process_crawl_task(url: str, max_depth: int):
         await chunk_task
         await embed_task
     except Exception as e:
-        print(f"Error in background crawl task: {str(e)}")
+        from src.config.logger import get_logger
+        get_logger(__name__).exception("background_crawl_failed", error=str(e))
 
 
 @router.post("/crawl")
