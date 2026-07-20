@@ -125,7 +125,7 @@ def query_rag_advanced(request: QueryRequest):
     try:
         engine = get_engine()
         # Retrieve
-        question_embedding = engine.embedder.generate_embeddings([request.question])[0]
+        question_embedding = engine.embeddings.embed_query(request.question)
         results = engine.db.query(query_embeddings=[question_embedding], n_results=request.top_k)
         
         # Format chunks for UI
