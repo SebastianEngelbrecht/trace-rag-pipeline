@@ -7,7 +7,6 @@ import uvicorn
 # Ensure src can be imported
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.api.routes import app
 from src.config.logger import setup_logging
 from src.config.settings import get_settings
 
