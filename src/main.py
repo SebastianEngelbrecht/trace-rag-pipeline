@@ -17,9 +17,9 @@ async def run_pipeline():
     
     # 1. Crawl
     print("\n🕸️ Crawling data...")
-    crawler = WebCrawler(max_depth=1)
+    crawler = AsyncCrawler("https://www.example.com", max_depth=1)
     # Just crawl a small example for testing
-    crawled_data = await crawler.crawl("https://www.example.com")
+    crawled_data = await crawler.crawl()
     print(f"Crawled {len(crawled_data)} pages.")
     
     # 2. Chunk
