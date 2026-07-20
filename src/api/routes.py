@@ -152,13 +152,15 @@ def query_rag_advanced(request: QueryRequest):
         User Question: {request.question}
         """
 
+        import google.genai as genai
+
         response = engine.client.models.generate_content(
             model=engine.model_name,
             contents=prompt,
-            config=engine.client.types.GenerateContentConfig(
+            config=genai.types.GenerateContentConfig(
                 system_instruction=engine.system_instruction,
                 temperature=0.3,
-            )
+            ),
         )
         
         answer_text = response.text
