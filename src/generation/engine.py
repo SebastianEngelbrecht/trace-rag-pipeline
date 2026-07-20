@@ -1,26 +1,46 @@
 import sys
+import os
 from pathlib import Path
 
 # Add project root to Python path so 'src' can be imported when running as a script
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-import google.genai as genai
 from src.config.settings import get_settings
 from src.config.logger import get_logger
-from src.embedding.gemini import GeminiEmbedder
 from src.database.chroma_manager import ChromaManager
+
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_community.retrievers import BM25Retriever
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 
 logger = get_logger(__name__)
 
 class RAGEngine:
     def __init__(self):
         settings = get_settings()
-        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
         self.model_name = settings.CHAT_MODEL
         
         # Initialize dependencies
-        self.embedder = GeminiEmbedder()
         self.db = ChromaManager()
+        
+        # Initialize Langchain components
+        self.embeddings = GoogleGenerativeAIEmbeddings(model=settings.EMBEDDING_MODEL)
+        self.llm = ChatGoogleGenerativeAI(
+            model=settings.CHAT_MODEL,
+            temperature=0.3,
+            max_tokens=None,
+            timeout=None,
+            max_retries=2,
+        )
+        
+        # Reconstruct LangChain Chroma VectorStore from our existing local DB
+        self.vector_store = Chroma(
+            client=self.db.client,
+            collection_name=self.db.collection_name,
+            embedding_function=self.embeddings,
+        )
         
         # System prompt instructions
         self.system_instruction = """
@@ -34,57 +54,99 @@ class RAGEngine:
         4. If you use information from a specific chunk, cite the `source_url` provided in the metadata.
         """
 
-    def _format_context(self, retrieved_results) -> str:
-        """Helper to format ChromaDB output into a readable string for the LLM."""
-        if not retrieved_results or not retrieved_results.get("documents") or not retrieved_results["documents"][0]:
+    def _reciprocal_rank_fusion(self, results_list: list[list[Document]], k: int = 60) -> list[Document]:
+        """
+        Fuses multiple ranked lists using Reciprocal Rank Fusion.
+        RRF_score = sum(1 / (k + rank))
+        """
+        fused_scores = {}
+        doc_map = {}
+
+        for docs in results_list:
+            for rank, doc in enumerate(docs):
+                # Use page_content as a unique identifier for simplicity, 
+                # or a unique chunk ID if available in metadata
+                doc_id = doc.page_content
+                if doc_id not in fused_scores:
+                    fused_scores[doc_id] = 0
+                    doc_map[doc_id] = doc
+                fused_scores[doc_id] += 1 / (k + rank)
+
+        # Sort documents based on their fused scores internally
+        reranked_results = sorted(
+            [(score, doc_id) for doc_id, score in fused_scores.items()],
+            key=lambda x: x[0],
+            reverse=True
+        )
+
+        return [doc_map[doc_id] for _, doc_id in reranked_results]
+
+    def _get_hybrid_results(self, user_question: str, top_k: int = 5) -> list[Document]:
+        """Gets results from BM25 and Vector matching and fuses them."""
+        
+        # 1. Setup Vector Retriever
+        vector_retriever = self.vector_store.as_retriever(search_kwargs={"k": top_k})
+        vector_results = vector_retriever.invoke(user_question)
+        
+        # 2. Setup BM25 Retriever
+        all_data = self.db.collection.get()
+        if not all_data or not all_data.get('documents'):
+            return vector_results
+            
+        docs = []
+        for doc_content, metadata in zip(all_data['documents'], all_data['metadatas']):
+             # Reconstruct Langchain Document objects
+             docs.append(Document(page_content=doc_content, metadata=metadata or {}))
+             
+        bm25_retriever = BM25Retriever.from_documents(docs)
+        bm25_retriever.k = top_k
+        bm25_results = bm25_retriever.invoke(user_question)
+        
+        # 3. Fuse Results
+        fused_results = self._reciprocal_rank_fusion([vector_results, bm25_results])
+        return fused_results[:top_k]
+
+    def _format_context(self, retrieved_docs) -> str:
+        """Helper to format LangChain Document output into a readable string for the LLM."""
+        if not retrieved_docs:
             return "No relevant context found."
             
         formatted_parts = []
-        documents = retrieved_results["documents"][0]
-        metadatas = retrieved_results["metadatas"][0]
         
-        for doc, meta in zip(documents, metadatas):
-            source = meta.get("source_url", "Unknown source")
-            formatted_parts.append(f"[Source: {source}]\n{doc}\n")
+        for doc in retrieved_docs:
+            source = doc.metadata.get("source_url", "Unknown source")
+            formatted_parts.append(f"[Source: {source}]\n{doc.page_content}\n")
             
         return "\n---\n".join(formatted_parts)
 
     def query(self, user_question: str, top_k: int = 5) -> str:
         """
-        Retrieval-Augmented Generation standard query.
+        Retrieval-Augmented Generation using custom Hybrid Search.
         """
         logger.info("rag_query_started", question=user_question)
         
-        # 1. Embed the user's question
-        question_embedding = self.embedder.generate_embeddings([user_question])[0]
+        # 1. Get Hybrid Results
+        results = self._get_hybrid_results(user_question, top_k=top_k)
         
-        # 2. Retrieve relevant chunks
-        results = self.db.query(query_embeddings=[question_embedding], n_results=top_k)
-        
-        # 3. Format context
+        # 2. Format context
         context_string = self._format_context(results)
-        logger.debug("context_retrieved", num_chunks=len(results.get("documents", [[]])[0]))
+        logger.debug("context_retrieved", num_chunks=len(results))
         
         # 4. Construct prompt
         prompt = f"""
+        {self.system_instruction}
+
         Context Information:
         {context_string}
         
         User Question: {user_question}
         """
         
-        # 5. Generate response
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=self.system_instruction,
-                temperature=0.3, # Keep it mostly deterministic
-            )
-        )
+        # 5. Generate response using LangChain LLM
+        response = self.llm.invoke(prompt)
         
         logger.info("rag_response_generated")
-        return response.text
+        return response.content
 
 if __name__ == "__main__":
     # Test script for the engine

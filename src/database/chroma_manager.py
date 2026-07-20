@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import numpy as np
 
 # Add project root to Python path so 'src' can be imported when running as a script
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -78,5 +79,3 @@ if __name__ == "__main__":
     manager = ChromaManager()
     print(f"ChromaDB initialized at: {manager.persist_directory}")
     print(f"Collection count: {manager.count()}")
-
-# Make sure that I do a hybrid search with vector retriever and BM25 retriever. The vector retriever will use the embeddings to find similar chunks, while the BM25 retriever will use keyword matching to find relevant chunks. This way, we can combine the strengths of both methods for better retrieval performance.
