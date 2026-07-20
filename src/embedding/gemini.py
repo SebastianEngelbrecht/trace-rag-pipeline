@@ -21,6 +21,8 @@ class GeminiEmbedder:
 
     def generate_embeddings(self, chunks: list[str], batch_size: int = 100) -> list[list[float]]:
         """Generates embeddings for a list of text chunks in batches."""
+        if batch_size <= 0:
+             raise ValueError("batch_size must be a positive integer")
         all_embeddings = []
         for i in range(0, len(chunks), batch_size):
             batch = chunks[i:i + batch_size]
