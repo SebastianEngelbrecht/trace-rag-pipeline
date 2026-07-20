@@ -33,7 +33,7 @@ class QueryRequest(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def get_ui(request: Request):
     """Serve the advanced UI dashboard."""
-    return templates.TemplateResponse(request=request, name="index.html")
+    return templates.TemplateResponse("index.html", {"request": request})
 
 async def chunking_worker(page_queue: asyncio.Queue, chunk_queue: asyncio.Queue, chunker: TextChunker, websocket: WebSocket = None):
     """Worker that reads crawled pages, chunks them, and passes them to the chunk_queue."""
