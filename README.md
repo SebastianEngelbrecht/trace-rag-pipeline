@@ -1,48 +1,87 @@
-# RAGLens: An Observable Production RAG Pipeline
+# trace-rag-pipeline
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/uv-fast-magenta.svg)](https://docs.astral.sh/uv/)
 
-A production-ready Retrieval-Augmented Generation (RAG) pipeline with built-in observability and tracing.
+Prototype ingestion pipeline for a Retrieval-Augmented Generation workflow, centered on crawling web content, splitting text into chunks, and preparing content for Gemini embeddings.
 
-## 📖 Overview
+## Overview
 
-This project provides a complete RAG pipeline with components for document ingestion, chunking, and API serving. It leverages LangChain and Playwright for reliable data processing, extraction, and vectorization, with a strong focus on observing and tracing the generation process.
+This repository is an early-stage RAG pipeline project. The implemented pieces focus on ingestion:
 
-## 📂 Project Structure
+- Crawling site content with Playwright
+- Cleaning and chunking extracted text with LangChain text splitters
+- Generating embeddings through Gemini
 
-- `src/main.py`: Main entry point for the application.
-- `src/api/`: API endpoints for interacting with the RAG pipeline.
-- `src/ingestion/`: Modules for data ingestion.
-  - `crawler.py`: Web crawling and document fetching utilizing Playwright.
-  - `chunker.py`: Text splitting and structural chunking using LangChain.
+The application entry point is still minimal, and the vector-store integration is not implemented yet.
 
-## 🚀 Setup & Installation
+## Current Status
 
-1. Ensure you have Python 3.12 or higher installed. We recommend using `uv` for dependency management.
+What exists today:
 
-2. Install the dependencies using `uv` (as indicated by the `uv.lock` file):
+- A concurrent crawler for collecting page text
+- A chunking layer for converting crawled content into embedding-ready records
+- A Gemini embedding utility for batched vector generation
+
+What is not wired yet:
+
+- A complete end-to-end pipeline entry point
+- Persistent vector database storage
+- API endpoints
+
+## Project Structure
+
+```text
+src/
+  main.py                  Minimal application entry point
+  config/                  Project configuration
+  database/                Future vector-store integration
+  embedding/               Gemini embedding utilities
+  ingestion/
+    crawler.py             Async Playwright crawler
+    chunker.py             Text cleaning and chunk generation
+```
+
+## Requirements
+
+- Python 3.12+
+- `uv` for environment and dependency management
+- Playwright browser binaries for crawling
+
+## Setup
+
+Install dependencies:
 
 ```bash
-# To install uv if you don't have it
 curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Sync dependencies 
 uv sync
 ```
 
-3. Install Playwright browsers (required for the web crawler):
+Install Playwright browsers:
 
 ```bash
 uv run playwright install
 ```
 
-## 💻 Usage
+## Usage
 
-*(Detailed usage instructions and API documentation will be added as the project evolves.)*
-
-### Running the pipeline
+The repository does not yet expose a complete top-level pipeline command. The current entry point is a stub:
 
 ```bash
 uv run python src/main.py
 ```
+
+At the moment, the most practical way to exercise the project locally is by running the ingestion modules directly while the main pipeline is being assembled.
+
+## Development Notes
+
+- The repo is currently organized around ingestion first, orchestration later.
+- Expect the main workflow to evolve as database persistence and pipeline wiring are added.
+- The empty [docs](docs) directory is available for future architecture notes, examples, or operational guides.
+
+## Roadmap
+
+- Wire the crawler, chunker, and embedding steps together from a real entry point
+- Add vector-store persistence
+- Add tests and smoke checks for the ingestion path
+- Document configuration and example runs

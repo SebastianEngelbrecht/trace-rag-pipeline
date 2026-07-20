@@ -141,6 +141,3 @@ if __name__ == "__main__":
     content = asyncio.run(crawler.crawl())
     print(f"\nSuccessfully crawled {len(content)} total platform urls.")
     print(f"First 10 items of the crawled content:\n{list(content.items())[:10]}")
-
-# FIND WEBSITE THAT DOESN'T HAVE A LOT OF LINKS AND ISN'T TOO BIG, SO THAT WE CAN TEST THE CRAWLER.
-# ALSO BUILD THE CHUNKING FUNCTIONALITY TO SPLIT THE TEXT INTO CHUNKS AND STORE THEM IN A VECTOR DATABASE.
