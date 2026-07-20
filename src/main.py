@@ -1,10 +1,10 @@
+"""Application entry point for the trace RAG pipeline."""
+
 import sys
 from pathlib import Path
 
 # Ensure src can be imported
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-"""Application entry point for the trace RAG pipeline."""
 
 import asyncio
 from src.ingestion.crawler import AsyncCrawler
