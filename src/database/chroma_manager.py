@@ -42,7 +42,7 @@ class ChromaManager:
             for chunk in chunks
         ]
 
-        self.collection.add(
+        self.collection.upsert(
             ids=ids,
             embeddings=embeddings,
             documents=documents,
