@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 
 # Ensure src can be imported
