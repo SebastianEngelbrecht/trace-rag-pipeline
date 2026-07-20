@@ -24,8 +24,8 @@ class QueryRequest(BaseModel):
 async def process_crawl_task(url: str, max_depth: int):
     try:
         # Crawling
-        crawler = WebCrawler(max_depth=max_depth)
-        crawled_data = await crawler.crawl(url)
+        crawler = AsyncCrawler(url, max_depth=max_depth)
+        crawled_data = await crawler.crawl()
         if not crawled_data:
             return
 
