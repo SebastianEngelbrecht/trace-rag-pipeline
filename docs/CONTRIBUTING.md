@@ -26,10 +26,12 @@ We welcome contributions to the Trace RAG Pipeline project! This document provid
    # CHROMA_DB_DIR="./chroma_store"
    # MAX_CRAWL_DEPTH=3
    # MAX_CONCURRENCY=5
+   # LOG_LEVEL="INFO" # Standard levels: DEBUG, INFO, WARNING, ERROR
    ```
 
 ## Development Guidelines
 
+- **Logging:** Use the project's structured logger (`from src.config.logger import get_logger`) instead of `print()` statements for any console output.
 - **Formatting & Linting:** Please ensure your code follows standard PEP 8 styling conventions. We recommend using `ruff` or `black` for formatting before opening a PR.
 - **Dependency Management:** Whenever adding a new dependency, please add it strictly via `pyproject.toml` and use `uv sync` to lock dependencies.
 - **Type Hinting:** We encourage strict type hinting across all Python files (`def function(name: str) -> None:`).

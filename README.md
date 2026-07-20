@@ -14,6 +14,7 @@ This complete ingestion and retrieval pipeline supports the following capabiliti
 - **Embeddings:** Generating embeddings using the native `google-genai` Gemini Client
 - **Vector Store:** Local persistence of embeddings and metadata using ChromaDB
 - **REST API:** A FastAPI backend allowing background initiation of crawl jobs, and searching your vector store.
+- **Structured Logging:** Centralized structlog configurations emitting contextual JSON pipelines.
 
 ## Architecture & Project Structure
 
@@ -26,6 +27,7 @@ src/
     routes.py              FastAPI server entry point & REST endpoints
   config/
     settings.py            Pydantic settings loading from `.env`
+    logger.py              Structlog structured logging configuration
   database/
     chroma_manager.py      ChromaDB vector store integration
   embedding/
@@ -63,6 +65,7 @@ Finally, define your environment variables. Create a `.env` file in the root of 
 
 ```env
 GEMINI_API_KEY="your_api_key_here"
+LOG_LEVEL="INFO" # Optional: DEBUG, INFO, WARNING, ERROR
 ```
 
 ## Usage

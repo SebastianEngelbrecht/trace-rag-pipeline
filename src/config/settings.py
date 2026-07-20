@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     MAX_CRAWL_DEPTH: int = 3
     MAX_CONCURRENCY: int = 5
     
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    
     # Pydantic v2 config standard
     # Provide the absolute path string so Pydantic knows exactly where to look
     model_config = SettingsConfigDict(

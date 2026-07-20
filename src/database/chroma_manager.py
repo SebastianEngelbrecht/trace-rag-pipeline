@@ -6,6 +6,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import chromadb
 from src.config.settings import settings
+from src.config.logger import get_logger
+
+logger = get_logger(__name__)
 
 class ChromaManager:
     def __init__(self, collection_name: str = "rag_collection"):
@@ -21,6 +24,10 @@ class ChromaManager:
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"} # Use cosine similarity
         )
+        logger.info("chroma_db_initialized", 
+                    directory=self.persist_directory, 
+                    collection=self.collection_name, 
+                    count=self.count())
 
     def add_chunks(self, chunks: list[dict], embeddings: list[list[float]]):
         """Adds text chunks and their embeddings to ChromaDB."""
@@ -47,9 +54,11 @@ class ChromaManager:
             documents=documents,
             metadatas=metadatas
         )
+        logger.debug("chunks_added_to_chroma", count=len(chunks))
 
     def query(self, query_embeddings: list[list[float]], n_results: int = 5):
         """Queries the collection using embeddings."""
+        logger.debug("querying_chroma", results_requested=n_results)
         return self.collection.query(
             query_embeddings=query_embeddings,
             n_results=n_results

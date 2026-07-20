@@ -1,6 +1,14 @@
 import asyncio
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from playwright.async_api import async_playwright
+import sys
+from pathlib import Path
+
+# Provide resolving for standalone runs
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from src.config.logger import get_logger
+
+logger = get_logger(__name__)
 
 class AsyncCrawler:
     def __init__(self, base_url: str, max_depth: int = 3, max_concurrency: int = 5):
@@ -71,7 +79,7 @@ class AsyncCrawler:
                     continue
                 self.visited_urls.add(url)
 
-            print(f"[CRAWLER] Worker processing Depth {depth} -> {url}")
+            logger.info("processing_url", depth=depth, url=url)
             
             page = await context.new_page()
             try:
@@ -99,7 +107,7 @@ class AsyncCrawler:
                             await queue.put((absolute_url, depth + 1))
                             
             except Exception as e:
-                print(f"[ERROR] Failed to scrape reference link {url}: {str(e)}")
+                logger.error("crawl_error", url=url, error=str(e))
             finally:
                 await page.close()
                 queue.task_done()

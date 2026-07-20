@@ -11,6 +11,10 @@ from src.ingestion.crawler import AsyncCrawler
 from src.ingestion.chunker import TextChunker
 from src.embedding.gemini import GeminiEmbedder
 from src.database.chroma_manager import ChromaManager
+from src.config.logger import setup_logging, get_logger
+from src.config.settings import settings
+
+logger = get_logger(__name__)
 
 async def chunking_worker(page_queue: asyncio.Queue, chunk_queue: asyncio.Queue, chunker: TextChunker):
     """
@@ -49,7 +53,7 @@ async def embedding_worker(chunk_queue: asyncio.Queue, embedder: GeminiEmbedder,
         # Run sync methods in thread pool to not block asyncio event loop
         embeddings = await loop.run_in_executor(None, embedder.generate_embeddings, chunk_texts)
         await loop.run_in_executor(None, db_manager.add_chunks, current_batch, embeddings)
-        print(f"💾 Stored batch of {len(current_batch)} chunks. Total in DB: {db_manager.count()}")
+        logger.info("batch_stored", batch_size=len(current_batch), total_db_count=db_manager.count())
 
     while True:
         item = await chunk_queue.get()
@@ -71,10 +75,11 @@ async def run_pipeline():
     It links a producer (the web crawler) with consumers (chunker and embedder workers)
     using asyncio queues.
     """
-    print("🚀 Starting Streaming RAG Pipeline...")
+    logger.info("pipeline_started")
     
     page_queue = asyncio.Queue()
     chunk_queue = asyncio.Queue()
+
     
     crawler = AsyncCrawler("https://detsundekoekken.dk", max_depth=1)
     chunker = TextChunker()
@@ -86,19 +91,20 @@ async def run_pipeline():
     embed_task = asyncio.create_task(embedding_worker(chunk_queue, embedder, db_manager, batch_size=20))
     
     # Start producer
-    print("\n🕸️ Crawling data & streaming to chunker...")
+    logger.info("crawling_started")
     await crawler.crawl(out_queue=page_queue)
     
     # Signal workers to finish
-    print("\n🏁 Crawl complete. Waiting for remaining chunks to process...")
+    logger.info("crawl_complete", status="waiting_for_chunks")
     await page_queue.put(None)
     
     await chunk_task
     await embed_task
     
-    print(f"\n✅ Pipeline completed successfully! Final DB Count: {db_manager.count()}")
+    logger.info("pipeline_completed", final_db_count=db_manager.count())
 
 def main():
+    setup_logging(settings.LOG_LEVEL)
     asyncio.run(run_pipeline())
 
 if __name__ == "__main__":

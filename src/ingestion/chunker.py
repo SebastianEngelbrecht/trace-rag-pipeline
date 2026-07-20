@@ -2,8 +2,16 @@
 import asyncio
 import re
 import uuid
+import sys
+from pathlib import Path
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing import List, Dict
+
+# Provide resolving for standalone runs
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from src.config.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Late import to avoid circular dependencies if used in some contexts, but ideal for token coupling
 try:
@@ -103,7 +111,7 @@ class TextChunker:
                 try:
                     token_counts = self.embedder.count_tokens(text_chunks)
                 except Exception as e:
-                    print(f"Token counting failed: {e}")
+                    logger.warning("token_counting_failed", error=str(e), fallback="char_length_division")
                     token_counts = [len(c) // 4 for c in text_chunks]
             else:
                 token_counts = [len(c) // 4 for c in text_chunks]
