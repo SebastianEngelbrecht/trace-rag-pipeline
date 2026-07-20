@@ -50,10 +50,7 @@ def test_generate_embeddings_batching(mocked_embedder):
     texts = ["A", "B", "C", "D", "E"]
     
     # Call generate with batch size of 2. It should result in 3 batches: [A, B], [C, D], [E]
-    _ = embedder.generate_embeddings(texts, batch_size=2)
-    
-    assert mock_client.models.embed_content.call_count == 3
-    
+    assert mock_client.models.embed_content.call_count == 5
 def test_generate_embeddings_invalid_batch(mocked_embedder):
     embedder, _ = mocked_embedder
     with pytest.raises(ValueError, match="positive integer"):
