@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import chromadb
-from src.config.settings import settings
+from src.config.settings import get_settings
 from src.config.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 class ChromaManager:
     def __init__(self, collection_name: str = "rag_collection"):
         """Initialize ChromaDB client and collection."""
+        settings = get_settings()
         self.persist_directory = str(Path(settings.CHROMA_DB_DIR).resolve())
         self.collection_name = collection_name
         

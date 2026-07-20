@@ -5,18 +5,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import google.genai as genai
-from src.config.settings import settings
+from src.config.settings import get_settings
 from src.config.logger import get_logger
 from tenacity import retry, wait_exponential, stop_after_attempt
 
 logger = get_logger(__name__)
 
-# Initialize the Client once
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
 class GeminiEmbedder:
-    def __init__(self, model_name: str = settings.EMBEDDING_MODEL):
-        self.model_name = model_name
+    def __init__(self, model_name: str | None = None):
+        settings = get_settings()
+        self.model_name = model_name or settings.EMBEDDING_MODEL
+        # Initialize the Client lazily per-instance to allow tests to run without API keys
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     def count_tokens(self, texts: list[str]) -> list[int]:
         """Gets exact token counts for a list of texts using the Gemini API.
@@ -26,7 +26,7 @@ class GeminiEmbedder:
         """
         counts = []
         for text in texts:
-            response = client.models.count_tokens(
+            response = self.client.models.count_tokens(
                 model=self.model_name,
                 contents=[text]
             )
@@ -46,7 +46,7 @@ class GeminiEmbedder:
         # For a robust approach with the current SDK:
         embeddings = []
         for text in texts:
-            response = client.models.embed_content(model=self.model_name, contents=text)
+            response = self.client.models.embed_content(model=self.model_name, contents=text)
             # Each response.embeddings is a list with one item for a single content
             embeddings.append(response.embeddings[0].values)
             

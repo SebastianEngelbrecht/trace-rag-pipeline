@@ -42,6 +42,7 @@ vector_store/
 
 # Logs
 *.log
+logs/
 
 # Jupyter Notebooks (Common for AI/data exploration)
 .ipynb_checkpoints/

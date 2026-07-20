@@ -12,7 +12,7 @@ from src.ingestion.chunker import TextChunker
 from src.embedding.gemini import GeminiEmbedder
 from src.database.chroma_manager import ChromaManager
 from src.config.logger import setup_logging, get_logger
-from src.config.settings import settings
+from src.config.settings import get_settings
 
 logger = get_logger(__name__)
 
@@ -104,6 +104,7 @@ async def run_pipeline():
     logger.info("pipeline_completed", final_db_count=db_manager.count())
 
 def main():
+    settings = get_settings()
     setup_logging(settings.LOG_LEVEL)
     asyncio.run(run_pipeline())
 
