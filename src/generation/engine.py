@@ -68,6 +68,7 @@ class RAGEngine:
                 source_url = doc.metadata.get("source_url")
                 chunk_index = doc.metadata.get("chunk_index")
                 doc_id = f"{source_url}::{chunk_index}" if source_url is not None and chunk_index is not None else doc.page_content
+                if doc_id not in fused_scores:
                     fused_scores[doc_id] = 0
                     doc_map[doc_id] = doc
                 fused_scores[doc_id] += 1 / (k + rank)
@@ -144,9 +145,14 @@ class RAGEngine:
         
         # 5. Generate response using LangChain LLM
         response = self.llm.invoke(prompt)
+        content = response.content
+        if isinstance(content, list):
+            content = "".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
+        else:
+            content = str(content)
         
         logger.info("rag_response_generated")
-        return response.content
+        return content
 
 if __name__ == "__main__":
     # Test script for the engine

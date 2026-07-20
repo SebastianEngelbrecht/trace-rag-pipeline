@@ -37,7 +37,7 @@ async def websocket_ingest(websocket: WebSocket):
         target_url = config_data.get("url")
         chunk_size = config_data.get("chunk_size", 500)
         overlap = config_data.get("overlap", 50)
-        max_depth = config_data.get("max_depth", 1)
+        max_depth = config_data.get("max_depth", 3)
 
         await websocket.send_json({"status": "running", "message": f"Starting crawler on {target_url} (depth={max_depth})..."})
         
@@ -148,6 +148,8 @@ def query_rag_advanced(request: QueryRequest):
         
         # Reconstruct Prompt (for observability)
         prompt = f"""
+        {engine.system_instruction}
+
         Context Information:
         {context_string}
         
@@ -155,14 +157,14 @@ def query_rag_advanced(request: QueryRequest):
         """
 
         # Generate
-        answer = engine.client.models.generate_content(
-            model=engine.model_name,
-            contents=prompt,
-            config=engine.client.types.GenerateContentConfig( # Ensure this uses the correct SDK types
-                system_instruction=engine.system_instruction,
-                temperature=0.3,
-            )
-        ).text
+        answer_message = engine.llm.invoke(prompt)
+        answer_content = answer_message.content
+        
+        # Handle cases where content might be a list of blocks instead of a plain string
+        if isinstance(answer_content, list):
+            answer = "".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in answer_content)
+        else:
+            answer = str(answer_content)
 
         return GenerationResponse(answer=answer, chunks=ui_chunks, prompt=prompt)
 
