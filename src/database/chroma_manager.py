@@ -24,10 +24,11 @@ class ChromaManager:
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"} # Use cosine similarity
         )
-        logger.info("chroma_db_initialized", 
-                    directory=self.persist_directory, 
-                    collection=self.collection_name, 
-                    count=self.count())
+        logger.info(
+            "chroma_db_initialized",
+            directory=self.persist_directory,
+            collection=self.collection_name,
+        )
 
     def add_chunks(self, chunks: list[dict], embeddings: list[list[float]]):
         """Adds text chunks and their embeddings to ChromaDB."""
