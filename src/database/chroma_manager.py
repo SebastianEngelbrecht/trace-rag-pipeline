@@ -1,7 +1,5 @@
 import sys
 from pathlib import Path
-import numpy as np
-
 # Add project root to Python path so 'src' can be imported when running as a script
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
