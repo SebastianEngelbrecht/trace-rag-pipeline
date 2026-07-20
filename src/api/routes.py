@@ -139,7 +139,12 @@ def query_rag_advanced(request: QueryRequest):
                 })
 
         # Generate Context String
-        context_string = engine._format_context(results)
+        formatted_parts = []
+        if results and results.get("documents") and results["documents"][0]:
+            for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
+                source = meta.get("source_url", "Unknown source")
+                formatted_parts.append(f"[Source: {source}]\n{doc}\n")
+        context_string = "\n---\n".join(formatted_parts) if formatted_parts else "No relevant context found."
         
         # Reconstruct Prompt (for observability)
         prompt = f"""
