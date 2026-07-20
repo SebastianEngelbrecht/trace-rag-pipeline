@@ -73,7 +73,7 @@ GEMINI_API_KEY="your_api_key_here"
 The recommended way to interact with the system is via the FastAPI backend. Start the server:
 
 ```bash
-uv run python src/api/app.py
+uv run uvicorn src.api.routes:app --reload
 ```
 
 The API will run locally at `http://0.0.0.0:8000`. You can visit `http://127.0.0.1:8000/docs` to interact with the auto-generated Swagger UI.
