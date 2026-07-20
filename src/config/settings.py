@@ -1,20 +1,3 @@
-"""
-Configuration Management Settings
-
-STEP 1: Install required packages
-Run the following command in your terminal to install Pydantic for settings management:
-    pip install pydantic pydantic-settings python-dotenv
-
-STEP 2: Create a .env file
-Create a file named `.env` in the root of your project (trace-rag-pipeline/.env).
-Add your secret keys and configurations there, for example:
-    GEMINI_API_KEY=your_real_api_key_here
-    CHROMA_DB_DIR=./chroma_data
-
-STEP 3: Define your Settings Model
-Uncomment and use the Pydantic BaseSettings class below. BaseSettings will automatically 
-read the .env file and validate that your environment variables are correct.
-"""
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
