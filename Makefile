@@ -28,6 +28,20 @@ build:
 up:
 	docker compose up -d
 
+# Frontend specific commands
+front-install:
+	cd frontend && npm install
+
+front-dev:
+	cd frontend && npm run dev
+
+# Frontend specific commands
+front-install:
+	cd frontend && npm install
+
+front-dev:
+	cd frontend && npm run dev
+
 # View logs
 logs:
 	docker compose logs -f

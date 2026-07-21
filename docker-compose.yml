@@ -14,3 +14,19 @@ services:
     restart: unless-stopped
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: trace-rag-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+    depends_on:
+      - api

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, APIRouter
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from functools import lru_cache
@@ -13,6 +14,15 @@ from src.config.logger import get_logger
 logger = get_logger(__name__)
 
 app = FastAPI(title="Trace RAG Pipeline")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 router = APIRouter(prefix="/api/v1", tags=["RAG"])
 
 @lru_cache()
