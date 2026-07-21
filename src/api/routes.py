@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, APIRouter
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from functools import lru_cache
@@ -13,6 +13,7 @@ from src.config.logger import get_logger
 logger = get_logger(__name__)
 
 app = FastAPI(title="Trace RAG Pipeline")
+router = APIRouter(prefix="/api/v1", tags=["RAG"])
 
 @lru_cache()
 def get_engine() -> RAGEngine:
@@ -126,6 +127,12 @@ async def websocket_ingest(websocket: WebSocket):
         logger.exception("Error during pipeline run")
         await websocket.send_json({"status": "error", "message": str(e)})
 
+@router.post("/query/advanced", response_model=GenerationResponse)
+def api_query_rag_advanced(request: QueryRequest):
+    """Hits the hybrid database, formats chunks, asks LLM, and returns full context."""
+    # Redirect to the main endpoint handler to prevent logic duplication
+    return query_rag_advanced(request)
+
 @app.post("/query/advanced", response_model=GenerationResponse)
 def query_rag_advanced(request: QueryRequest):
     """Hits the vector database, formats chunks, asks LLM, and returns full context (Prompt, Chunks, Answer)."""
@@ -194,6 +201,27 @@ def query_rag(request: QueryRequest):
 def health_check():
     try:
         engine = get_engine()
-        return {"status": "ok", "db_count": engine.db.count()}
+        return {"status": "ok", "db_count": engine.db.collection.count()}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+
+class CrawlRequest(BaseModel):
+    url: str
+    max_depth: int = 1
+
+@router.post("/crawl")
+async def api_crawl(request: CrawlRequest):
+    """Old crawling backwards compatibility endpoint."""
+    return {"status": "success", "message": "Background task deprecated, please use websocket /ws/ingest."}
+
+@router.get("/stats")
+def api_stats():
+    """Old DB stats backwards compatibility endpoint."""
+    return {"status": "success", "db_count": get_engine().db.collection.count()}
+
+@router.post("/query", response_model=QueryResponse)
+def api_query_rag(request: QueryRequest):
+    """Hits the vector database, formats the retrieved chunks, and asks the LLM to summarize."""
+    return query_rag(request)
+
+app.include_router(router)

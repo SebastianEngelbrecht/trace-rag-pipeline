@@ -62,7 +62,7 @@ class RAGEngine:
         
         # BM25 Cache
         self._bm25_retriever = None
-        self._bm25_collection_count = -1
+        self._bm25_cache_key = None
 
     def _reciprocal_rank_fusion(self, results_list: list[list[Document]], k: int = 60) -> list[Document]:
         """
@@ -100,11 +100,17 @@ class RAGEngine:
         vector_results = vector_retriever.invoke(user_question)
         
         # 2. Setup BM25 Retriever
-        current_count = self.db.collection.count()
+        # Fetch only ids to compute a cache key (order-independent hash of exact content state)
+        all_ids = self.db.collection.get(include=[])
+        current_count = len(all_ids.get("ids", []))
         if current_count == 0:
             return vector_results
             
-        if self._bm25_retriever is None or self._bm25_collection_count != current_count:
+        # Create a stable hash based on all IDs to detect upserts/updates
+        # even if the total count remains the exact same number
+        current_cache_key = hash(frozenset(all_ids.get("ids", [])))
+            
+        if self._bm25_retriever is None or self._bm25_cache_key != current_cache_key:
             # We explicitly ask only for documents and metadatas, rather than the default
             # which might include large embeddings payload causing memory overhead.
             all_data = self.db.collection.get(include=['documents', 'metadatas'])
@@ -117,7 +123,7 @@ class RAGEngine:
                  docs.append(Document(page_content=doc_content, metadata=metadata or {}))
                  
             self._bm25_retriever = BM25Retriever.from_documents(docs)
-            self._bm25_collection_count = current_count
+            self._bm25_cache_key = current_cache_key
             
         self._bm25_retriever.k = top_k
         bm25_results = self._bm25_retriever.invoke(user_question)
