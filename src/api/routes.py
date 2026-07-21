@@ -106,15 +106,16 @@ async def websocket_ingest(websocket: WebSocket):
         chunk_task = asyncio.create_task(ws_chunking_worker())
         embed_task = asyncio.create_task(ws_embedding_worker(batch_size=20))
         
-        # Start producer (crawler) and wait for it to finish crawling
-        await crawler.crawl(out_queue=out_queue)
-        
-        # Signal workers that crawling is done
-        await out_queue.put(None)
-        
-        # Wait for all workers to finish processing their queues
-        await chunk_task
-        await embed_task
+        try:
+            # Start producer (crawler) and wait for it to finish crawling
+            await crawler.crawl(out_queue=out_queue)
+        finally:
+            # Guarantee workers that crawling is done, avoiding hung asyncio tasks
+            await out_queue.put(None)
+            
+            # Wait for all workers to finish processing their queues
+            await chunk_task
+            await embed_task
 
         await websocket.send_json({
             "status": "complete", 
@@ -188,7 +189,7 @@ def query_rag_advanced(request: QueryRequest):
 
 @app.post("/query", response_model=QueryResponse)
 def query_rag(request: QueryRequest):
-    """Hits the vector database, formats the retrieved chunks, and asks the LLM to summarize."""
+    """Hits the database with a hybrid query (BM25 + Semantic Vector), formats the retrieved chunks, and asks the LLM to summarize."""
     try:
         engine = get_engine()
         answer = engine.query(request.question, top_k=request.top_k)
@@ -221,7 +222,7 @@ def api_stats():
 
 @router.post("/query", response_model=QueryResponse)
 def api_query_rag(request: QueryRequest):
-    """Hits the vector database, formats the retrieved chunks, and asks the LLM to summarize."""
+    """Hits the database with a hybrid query (BM25 + Semantic Vector), formats the retrieved chunks, and asks the LLM to summarize."""
     return query_rag(request)
 
 app.include_router(router)
