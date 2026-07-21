@@ -39,6 +39,10 @@ async def websocket_ingest(websocket: WebSocket):
         # Receive configuration from client
         config_data = await websocket.receive_json()
         target_url = config_data.get("url")
+        if not isinstance(target_url, str) or not target_url.strip():
+            await websocket.send_json({"status": "error", "message": "Missing or invalid 'url' in request."})
+            return
+        target_url = target_url.strip()
         try:
             chunk_size = int(config_data.get("chunk_size", 500))
             overlap = int(config_data.get("overlap", 50))
