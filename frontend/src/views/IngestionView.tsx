@@ -38,7 +38,7 @@ export const IngestionView: React.FC = () => {
                         <input 
                             type="range" 
                             min="1" 
-                            max="10" 
+                            max="3" 
                             step="1"
                             value={maxDepth} 
                             onChange={e => setMaxDepth(parseInt(e.target.value))} 
@@ -54,7 +54,7 @@ export const IngestionView: React.FC = () => {
                         <input 
                             type="range" 
                             min="100" 
-                            max="2000" 
+                            max="1000" 
                             step="50"
                             value={chunkSize} 
                             onChange={e => setChunkSize(parseInt(e.target.value))} 
@@ -70,7 +70,7 @@ export const IngestionView: React.FC = () => {
                         <input 
                             type="range" 
                             min="0" 
-                            max="500" 
+                            max="100" 
                             step="10"
                             value={overlap} 
                             onChange={e => setOverlap(parseInt(e.target.value))} 

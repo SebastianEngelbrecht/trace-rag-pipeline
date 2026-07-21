@@ -58,16 +58,23 @@ export const QueryView: React.FC = () => {
                             Top K:
                             <input 
                                 type="number" 
+                                min="1"
+                                max="5"
                                 value={topK} 
-                                onChange={e => setTopK(parseInt(e.target.value))} 
+                                onChange={e => {
+                                    const val = parseInt(e.target.value);
+                                    if(val > 5) setTopK(5);
+                                    else if(val < 1) setTopK(1);
+                                    else setTopK(val);
+                                }} 
                                 disabled={isLoading} 
                                 className="w-[60px] p-2 rounded border border-slate-700 bg-slate-800 text-slate-100 focus:outline-none focus:border-cyan-500 font-medium" 
                             />
                         </label>
                         <label className="flex gap-4 items-center text-caption text-slate-400">
-                            <span className="flex items-center gap-2">
+                            <span className="flex items-center gap-2 w-24">
                                 <Terminal className="w-4 h-4" />
-                                Temp ({temperature})
+                                Temp ({temperature.toFixed(1)})
                             </span>
                             <div className="relative flex items-center w-32">
                                 <input 
