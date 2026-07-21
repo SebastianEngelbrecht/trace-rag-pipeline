@@ -145,11 +145,18 @@ class RAGEngine:
             
         return "\n---\n".join(formatted_parts)
 
-    def query(self, user_question: str, top_k: int = 5) -> str:
+    def query(self, user_question: str, top_k: int = 5, temperature: float = 0.3) -> tuple[str, str, list, float, int]:
         """
         Retrieval-Augmented Generation using custom Hybrid Search.
+        Returns (answer, prompt, docs as dicts, response_time_ms, tokens_used)
         """
+        import time
+        start_time = time.time()
+        
         logger.info("rag_query_started", question=user_question)
+        
+        # Override temperature on LLM object per query dynamically
+        self.llm.temperature = temperature
         
         # 1. Get Hybrid Results
         results = self._get_hybrid_results(user_question, top_k=top_k)
@@ -176,8 +183,19 @@ class RAGEngine:
         else:
             content = str(content)
         
+        # Parse usage metadata and document objects
+        usage = getattr(response, "usage_metadata", {})
+        tokens_used = usage.get("total_tokens", 0) if usage else 0
+        
+        docs_dicts = [
+            {"content": doc.page_content, **doc.metadata}
+            for doc in results
+        ]
+        
+        response_time_ms = (time.time() - start_time) * 1000
+        
         logger.info("rag_response_generated")
-        return content
+        return content, prompt, docs_dicts, response_time_ms, tokens_used
 
 if __name__ == "__main__":
     # Test script for the engine

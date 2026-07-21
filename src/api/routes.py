@@ -32,6 +32,7 @@ def get_engine() -> RAGEngine:
 class QueryRequest(BaseModel):
     question: str
     top_k: int = 5
+    temperature: float = 0.3
 
 class QueryResponse(BaseModel):
     answer: str
@@ -69,7 +70,7 @@ async def websocket_ingest(websocket: WebSocket):
         
         chunk_queue = asyncio.Queue()
         chunker = TextChunker(chunk_size=chunk_size, overlap=overlap)
-        stats = {"crawled": 0, "embedded": 0}
+        stats = {"crawled": 0, "embedded": 0, "total_chars": 0}
 
         async def ws_chunking_worker():
             """Continuously reads crawled pages, chunks them, and passes them to embedder."""
@@ -82,6 +83,7 @@ async def websocket_ingest(websocket: WebSocket):
                 
                 url, text = item
                 stats["crawled"] += 1
+                stats["total_chars"] += len(text)
                 await websocket.send_json({"status": "running", "message": f"Crawled & chunking: {url} ({len(text)} characters)"})
                 
                 chunks = chunker.process_crawled_data({url: text})
@@ -131,9 +133,12 @@ async def websocket_ingest(websocket: WebSocket):
             await chunk_task
             await embed_task
 
+        # Approximate token count assuming ~4 characters per token for English text
+        approx_tokens = stats["total_chars"] // 4
+        
         await websocket.send_json({
             "status": "complete", 
-            "message": f"Pipeline run complete. Crawled {stats['crawled']} pages, indexed {stats['embedded']} chunks."
+            "message": f"Pipeline run complete. Crawled {stats['crawled']} pages, indexed {stats['embedded']} chunks. (~{approx_tokens} tokens)"
         })
         
     except WebSocketDisconnect:
@@ -145,57 +150,78 @@ async def websocket_ingest(websocket: WebSocket):
 @router.post("/query/advanced", response_model=GenerationResponse)
 def api_query_rag_advanced(request: QueryRequest):
     """Hits the hybrid database, formats chunks, asks LLM, and returns full context."""
-    # Redirect to the main endpoint handler to prevent logic duplication
     return query_rag_advanced(request)
+
+class StatsResponse(BaseModel):
+    total_queries: int
+    avg_response_time: float
+    total_tokens: int
+    ingested_chunks: int
+    total_db_tokens: int
+
+@app.get("/api/v1/stats", response_model=StatsResponse)
+def get_stats():
+    # In a real app we'd query an analytics DB, but here we can query the vector store
+    # and use some globals to proxy the stats to the frontend for UI demo purposes
+    engine = get_engine()
+    
+    # Simple global tracking for demo
+    queries = getattr(app.state, "total_queries", 0)
+    avg_time = getattr(app.state, "avg_response_time", 0.0)
+    tokens = getattr(app.state, "total_tokens", 0)
+    
+    try:
+        chunks = engine.db.collection.count()
+        
+        # Calculate total tokens by summing up the token_count metadata across all chunks
+        total_db_tokens = 0
+        if chunks > 0:
+            db_data = engine.db.collection.get(include=["metadatas"])
+            for meta in db_data.get("metadatas", []):
+                total_db_tokens += meta.get("token_count", getattr(engine.db, "default_tokens", 0)) # Default to 0 if token_count doesn't exist
+    except Exception as e:
+        logger.error(f"Error getting chroma db stats: {e}")
+        chunks = 0
+        total_db_tokens = 0
+        
+    return StatsResponse(
+        total_queries=queries,
+        avg_response_time=round(avg_time, 2),
+        total_tokens=tokens,
+        ingested_chunks=chunks,
+        total_db_tokens=total_db_tokens
+    )
 
 @app.post("/query/advanced", response_model=GenerationResponse)
 def query_rag_advanced(request: QueryRequest):
     """Hits the vector database, formats chunks, asks LLM, and returns full context (Prompt, Chunks, Answer)."""
     try:
         engine = get_engine()
-        # Retrieve
-        question_embedding = engine.embeddings.embed_query(request.question)
-        results = engine.db.query(query_embeddings=[question_embedding], n_results=request.top_k)
         
-        # Format chunks for UI
-        ui_chunks = []
-        if results and results.get("documents") and results["documents"][0]:
-            for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-                ui_chunks.append({
-                    "content": doc,
-                    "source_url": meta.get("source_url", "Unknown"),
-                    "chunk_index": meta.get("chunk_index", 0)
-                })
-
-        # Generate Context String
-        formatted_parts = []
-        if results and results.get("documents") and results["documents"][0]:
-            for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-                source = meta.get("source_url", "Unknown source")
-                formatted_parts.append(f"[Source: {source}]\n{doc}\n")
-        context_string = "\n---\n".join(formatted_parts) if formatted_parts else "No relevant context found."
+        answer, prompt, docs, response_time_ms, tokens_used = engine.query(
+            user_question=request.question,
+            top_k=request.top_k,
+            temperature=request.temperature
+        )
         
-        # Reconstruct Prompt (for observability)
-        prompt = f"""
-        {engine.system_instruction}
-
-        Context Information:
-        {context_string}
+        # Update global stats for telemetry UI
+        current_queries = getattr(app.state, "total_queries", 0)
+        current_avg = getattr(app.state, "avg_response_time", 0.0)
         
-        User Question: {request.question}
-        """
-
-        # Generate
-        answer_message = engine.llm.invoke(prompt)
-        answer_content = answer_message.content
+        new_queries = current_queries + 1
+        new_avg = ((current_avg * current_queries) + (response_time_ms / 1000.0)) / new_queries
         
-        # Handle cases where content might be a list of blocks instead of a plain string
-        if isinstance(answer_content, list):
-            answer = "".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in answer_content)
-        else:
-            answer = str(answer_content)
+        app.state.total_queries = new_queries
+        app.state.avg_response_time = new_avg
+        app.state.total_tokens = getattr(app.state, "total_tokens", 0) + tokens_used
 
-        return GenerationResponse(answer=answer, chunks=ui_chunks, prompt=prompt)
+        return GenerationResponse(
+            answer=answer, 
+            chunks=docs, 
+            prompt=prompt,
+            response_time_ms=response_time_ms,
+            tokens_used=tokens_used
+        )
 
     except Exception:
         logger.exception("query_rag_advanced_failed")
