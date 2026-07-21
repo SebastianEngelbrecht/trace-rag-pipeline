@@ -1,141 +1,153 @@
-import sys
-from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, APIRouter
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-import asyncio
+from functools import lru_cache
+from src.generation.engine import RAGEngine
 import traceback
-import time
-
-# Ensure src can be imported
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
+import asyncio
 from src.ingestion.crawler import AsyncCrawler
 from src.ingestion.chunker import TextChunker
-from src.embedding.gemini import GeminiEmbedder
-from src.database.chroma_manager import ChromaManager
-from src.generation.engine import RAGEngine
 from src.api.models import templates, GenerationResponse
+from src.config.logger import get_logger
+
+logger = get_logger(__name__)
 
 app = FastAPI(title="Trace RAG Pipeline")
 router = APIRouter(prefix="/api/v1", tags=["RAG"])
 
-engine = RAGEngine()
-
-class CrawlRequest(BaseModel):
-    url: str
-    max_depth: int = 1
+@lru_cache()
+def get_engine() -> RAGEngine:
+    return RAGEngine()
 
 class QueryRequest(BaseModel):
     question: str
     top_k: int = 5
-    
+
+class QueryResponse(BaseModel):
+    answer: str
+
 @app.get("/", response_class=HTMLResponse)
 async def get_ui(request: Request):
     """Serve the advanced UI dashboard."""
-    return templates.TemplateResponse("index.html", {"request": request})
-
-async def chunking_worker(page_queue: asyncio.Queue, chunk_queue: asyncio.Queue, chunker: TextChunker, websocket: WebSocket = None):
-    """Worker that reads crawled pages, chunks them, and passes them to the chunk_queue."""
-    while True:
-        item = await page_queue.get()
-        if item is None:
-            await chunk_queue.put(None)
-            page_queue.task_done()
-            break
-            
-        url, text = item
-        if websocket:
-            await websocket.send_json({"status": "running", "message": f"Crawled & Chunking: {url} ({len(text)} chars)"})
-            
-        chunks = chunker.process_crawled_data({url: text})
-        for chunk in chunks:
-            await chunk_queue.put(chunk)
-            
-        page_queue.task_done()
-
-async def embedding_worker(chunk_queue: asyncio.Queue, embedder: GeminiEmbedder, db_manager: ChromaManager, batch_size: int = 20, websocket: WebSocket = None):
-    """Worker that reads chunks, embeds them in batches, and saves to DB."""
-    batch = []
-    loop = asyncio.get_running_loop()
-    
-    async def process_batch(current_batch):
-        if not current_batch: return
-        chunk_texts = [c["content"] for c in current_batch]
-        embeddings = await loop.run_in_executor(None, embedder.generate_embeddings, chunk_texts)
-        await loop.run_in_executor(None, db_manager.add_chunks, current_batch, embeddings)
-        if websocket:
-            await websocket.send_json({"status": "running", "message": f"Indexed batch of {len(current_batch)} chunks. Total DB size: {db_manager.count()}"})
-
-    while True:
-        item = await chunk_queue.get()
-        if item is None:
-            await process_batch(batch)
-            chunk_queue.task_done()
-            break
-            
-        batch.append(item)
-        if len(batch) >= batch_size:
-            await process_batch(batch)
-            batch = []
-            
-        chunk_queue.task_done()
-
+    return templates.TemplateResponse(request, name="index.html")
 
 @app.websocket("/ws/ingest")
 async def websocket_ingest(websocket: WebSocket):
-    """WebSocket endpoint for real-time streaming ingestion logging and control."""
-    await websocket.accept(); start_time = time.time()
+    """WebSocket endpoint for real-time ingestion logging and control."""
+    await websocket.accept()
     try:
         # Receive configuration from client
         config_data = await websocket.receive_json()
         target_url = config_data.get("url")
-        chunk_size = int(config_data.get("chunk_size", 500))
-        overlap = int(config_data.get("overlap", 50))
-        max_depth = int(config_data.get("max_depth", 1))
+        if not isinstance(target_url, str) or not target_url.strip():
+            await websocket.send_json({"status": "error", "message": "Missing or invalid 'url' in request."})
+            return
+        target_url = target_url.strip()
+        try:
+            chunk_size = int(config_data.get("chunk_size", 500))
+            overlap = int(config_data.get("overlap", 50))
+            max_depth = int(config_data.get("max_depth", 3))
+        except (ValueError, TypeError) as e:
+            await websocket.send_json({"status": "error", "message": f"Invalid configuration value (expected integer): {e}"})
+            return
 
-        await websocket.send_json({"status": "running", "message": f"Starting streaming crawler on {target_url} (depth={max_depth})..."})
+        await websocket.send_json({"status": "running", "message": f"Starting crawler on {target_url} (depth={max_depth})..."})
         
-        page_queue = asyncio.Queue()
-        chunk_queue = asyncio.Queue()
-        
+        # Set up a queue to receive text content as it's scraped
+        out_queue = asyncio.Queue()
         crawler = AsyncCrawler(target_url, max_depth=max_depth, max_concurrency=3)
+        
+        chunk_queue = asyncio.Queue()
         chunker = TextChunker(chunk_size=chunk_size, overlap=overlap)
-        
-        # Start consumer tasks
-        chunk_task = asyncio.create_task(chunking_worker(page_queue, chunk_queue, chunker, websocket))
-        embed_task = asyncio.create_task(embedding_worker(chunk_queue, engine.embedder, engine.db, 20, websocket))
-        
-        # Run crawling
-        await crawler.crawl(out_queue=page_queue)
-        
-        # Signal crawling complete
-        await websocket.send_json({"status": "running", "message": "Crawling finished. Waiting for chunking and embedding to complete..."})
-        await page_queue.put(None)
-        
-        # Wait for pipelines to flush
-        await chunk_task
-        await embed_task
+        stats = {"crawled": 0, "embedded": 0}
 
-        end_time = time.time(); elapsed_time = round(end_time - start_time, 2); await websocket.send_json({"status": "complete", "message": f"Pipeline run complete in {elapsed_time}s."})
+        async def ws_chunking_worker():
+            """Continuously reads crawled pages, chunks them, and passes them to embedder."""
+            while True:
+                item = await out_queue.get()
+                if item is None:
+                    await chunk_queue.put(None)
+                    out_queue.task_done()
+                    break
+                
+                url, text = item
+                stats["crawled"] += 1
+                await websocket.send_json({"status": "running", "message": f"Crawled & chunking: {url} ({len(text)} characters)"})
+                
+                chunks = chunker.process_crawled_data({url: text})
+                for chunk in chunks:
+                    await chunk_queue.put(chunk)
+                out_queue.task_done()
+
+        async def ws_embedding_worker(batch_size=20):
+            """Continuously reads chunks, batches them, embeds, and stores in DB."""
+            batch = []
+            loop = asyncio.get_running_loop()
+            engine = get_engine()
+            
+            async def process_batch(current_batch):
+                if not current_batch: return
+                chunk_texts = [c["content"] for c in current_batch]
+                embeddings = await loop.run_in_executor(None, engine.embeddings.embed_documents, chunk_texts)
+                await loop.run_in_executor(None, engine.db.add_chunks, current_batch, embeddings)
+                stats["embedded"] += len(current_batch)
+                await websocket.send_json({"status": "running", "message": f"Indexed batch of {len(current_batch)} chunks. Total indexed: {stats['embedded']}"})
+
+            while True:
+                item = await chunk_queue.get()
+                if item is None:
+                    await process_batch(batch)
+                    chunk_queue.task_done()
+                    break
+                
+                batch.append(item)
+                if len(batch) >= batch_size:
+                    await process_batch(batch)
+                    batch = []
+                chunk_queue.task_done()
+
+        # Start streaming workers in the background
+        chunk_task = asyncio.create_task(ws_chunking_worker())
+        embed_task = asyncio.create_task(ws_embedding_worker(batch_size=20))
+        
+        try:
+            # Start producer (crawler) and wait for it to finish crawling
+            await crawler.crawl(out_queue=out_queue)
+        finally:
+            # Guarantee workers that crawling is done, avoiding hung asyncio tasks
+            await out_queue.put(None)
+            
+            # Wait for all workers to finish processing their queues
+            await chunk_task
+            await embed_task
+
+        await websocket.send_json({
+            "status": "complete", 
+            "message": f"Pipeline run complete. Crawled {stats['crawled']} pages, indexed {stats['embedded']} chunks."
+        })
         
     except WebSocketDisconnect:
-        from src.config.logger import get_logger
-        get_logger(__name__).info("websocket_client_disconnected")
+        logger.info("Client disconnected")
     except Exception as e:
-        from src.config.logger import get_logger
-        get_logger(__name__).exception("websocket_ingest_failed", error=str(e))
+        logger.exception("Error during pipeline run")
         await websocket.send_json({"status": "error", "message": str(e)})
 
+@router.post("/query/advanced", response_model=GenerationResponse)
+def api_query_rag_advanced(request: QueryRequest):
+    """Hits the hybrid database, formats chunks, asks LLM, and returns full context."""
+    # Redirect to the main endpoint handler to prevent logic duplication
+    return query_rag_advanced(request)
 
 @app.post("/query/advanced", response_model=GenerationResponse)
 def query_rag_advanced(request: QueryRequest):
     """Hits the vector database, formats chunks, asks LLM, and returns full context (Prompt, Chunks, Answer)."""
-    start_time = time.time()
     try:
-        question_embedding = engine.embedder.generate_embeddings([request.question])[0]
+        engine = get_engine()
+        # Retrieve
+        question_embedding = engine.embeddings.embed_query(request.question)
         results = engine.db.query(query_embeddings=[question_embedding], n_results=request.top_k)
         
+        # Format chunks for UI
         ui_chunks = []
         if results and results.get("documents") and results["documents"][0]:
             for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
@@ -145,79 +157,76 @@ def query_rag_advanced(request: QueryRequest):
                     "chunk_index": meta.get("chunk_index", 0)
                 })
 
-        context_string = engine._format_context(results)
+        # Generate Context String
+        formatted_parts = []
+        if results and results.get("documents") and results["documents"][0]:
+            for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
+                source = meta.get("source_url", "Unknown source")
+                formatted_parts.append(f"[Source: {source}]\n{doc}\n")
+        context_string = "\n---\n".join(formatted_parts) if formatted_parts else "No relevant context found."
         
+        # Reconstruct Prompt (for observability)
         prompt = f"""
+        {engine.system_instruction}
+
         Context Information:
         {context_string}
         
         User Question: {request.question}
         """
 
-        import google.genai as genai
-
-        response = engine.client.models.generate_content(
-            model=engine.model_name,
-            contents=prompt,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=engine.system_instruction,
-                temperature=0.3,
-            ),
-        )
+        # Generate
+        answer_message = engine.llm.invoke(prompt)
+        answer_content = answer_message.content
         
-        answer_text = response.text
-        tokens = 0
-        end_time = time.time()
-        elapsed_time = round((end_time - start_time) * 1000, 2)
+        # Handle cases where content might be a list of blocks instead of a plain string
+        if isinstance(answer_content, list):
+            answer = "".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in answer_content)
+        else:
+            answer = str(answer_content)
 
+        return GenerationResponse(answer=answer, chunks=ui_chunks, prompt=prompt)
 
+    except Exception:
+        logger.exception("query_rag_advanced_failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-        return GenerationResponse(answer=answer_text, chunks=ui_chunks, prompt=prompt, response_time_ms=elapsed_time, tokens_used=tokens)
-
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def process_crawl_task(url: str, max_depth: int):
+@app.post("/query", response_model=QueryResponse)
+def query_rag(request: QueryRequest):
+    """Hits the database with a hybrid query (BM25 + Semantic Vector), formats the retrieved chunks, and asks the LLM to summarize."""
     try:
-        page_queue = asyncio.Queue()
-        chunk_queue = asyncio.Queue()
-        
-        crawler = AsyncCrawler(url, max_depth=max_depth)
-        chunker = TextChunker()
-        
-        chunk_task = asyncio.create_task(chunking_worker(page_queue, chunk_queue, chunker))
-        embed_task = asyncio.create_task(embedding_worker(chunk_queue, engine.embedder, engine.db, 20))
-        
-        await crawler.crawl(out_queue=page_queue)
-        await page_queue.put(None)
-        
-        await chunk_task
-        await embed_task
-    except Exception as e:
-        from src.config.logger import get_logger
-        get_logger(__name__).exception("background_crawl_failed", error=str(e))
+        engine = get_engine()
+        answer = engine.query(request.question, top_k=request.top_k)
+        return QueryResponse(answer=answer)
+    except Exception:
+        logger.exception("query_rag_failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/health")
+def health_check():
+    try:
+        engine = get_engine()
+        return {"status": "ok", "db_count": engine.db.collection.count()}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+class CrawlRequest(BaseModel):
+    url: str
+    max_depth: int = 1
 
 @router.post("/crawl")
-async def trigger_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(process_crawl_task, req.url, req.max_depth)
-    return {"message": f"Streaming background crawl started for {req.url}"}
-
-@router.post("/query")
-async def query_documents(req: QueryRequest):
-    try:
-        # Compatibility redirect for the simpler route if anyone uses it
-        return query_rag_advanced(req)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def api_crawl(request: CrawlRequest):
+    """Old crawling backwards compatibility endpoint."""
+    return {"status": "success", "message": "Background task deprecated, please use websocket /ws/ingest."}
 
 @router.get("/stats")
-async def get_stats():
-    try:
-        count = engine.db.count()
-        return {"total_documents": count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def api_stats():
+    """Old DB stats backwards compatibility endpoint."""
+    return {"status": "success", "db_count": get_engine().db.collection.count()}
+
+@router.post("/query", response_model=QueryResponse)
+def api_query_rag(request: QueryRequest):
+    """Hits the database with a hybrid query (BM25 + Semantic Vector), formats the retrieved chunks, and asks the LLM to summarize."""
+    return query_rag(request)
 
 app.include_router(router)
