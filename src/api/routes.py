@@ -198,9 +198,9 @@ def query_rag(request: QueryRequest):
         engine = get_engine()
         answer = engine.query(request.question, top_k=request.top_k)
         return QueryResponse(answer=answer)
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("query_rag_failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/health")
 def health_check():
