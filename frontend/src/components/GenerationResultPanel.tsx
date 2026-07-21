@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Quote, Sparkles, Layers, Code2, Activity } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { GenerationResponse } from '../models/types';
 
 interface GenerationResultPanelProps {
@@ -44,8 +45,8 @@ export const GenerationResultPanel: React.FC<GenerationResultPanelProps> = ({ re
                             </div>
                         )}
                     </h3>
-                    <div className="text-body whitespace-pre-wrap text-slate-300 leading-relaxed relative z-10">
-                        {result.answer}
+                    <div className="prose prose-invert max-w-none text-body text-slate-300 leading-relaxed relative z-10 w-full prose-p:leading-relaxed prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800">
+                        <ReactMarkdown>{result.answer}</ReactMarkdown>
                     </div>
                 </div>
                 

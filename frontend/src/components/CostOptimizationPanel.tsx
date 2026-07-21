@@ -14,13 +14,12 @@ export const CostOptimizationPanel: React.FC = () => {
         ? stats.totalDbTokens 
         : stats.ingestedDocs * 125; // fallback to estimation if no specific token counts
     
-    // Naive baseline: Total DB Tokens * Number of Queries
+    // Naive baseline: Total DB Tokens * Number of Queries (Chat model has to read everything every time)
     const naiveTokens = totalDbTokens * stats.totalQueries;
-    const actualTokens = stats.totalTokens;
-    // Total Tokens is exactly what RAG consumed dynamically (Generation) + static cost of DB
-    const actualTotalTokens = actualTokens + totalDbTokens;
-    // RAG technically uses "Generation Tokens" + "Embedding Tokens" 
-    const savedTokens = Math.max(0, naiveTokens - actualTotalTokens);
+    const actualTokens = stats.totalTokens; // Only the chat tokens RAG actually used per query
+    
+    // We only compare Chat tokens for "Words Saved" because embedding happens once and isn't a chat interaction
+    const savedTokens = Math.max(0, naiveTokens - actualTokens);
     
     // Standard blended API cost (e.g., $1.25 per 1M tokens for generation)
     // Embedding generally costs fractions of a cent ($0.02 per 1M tokens), so we will add it to the naive calculation
@@ -67,9 +66,9 @@ export const CostOptimizationPanel: React.FC = () => {
                             className="absolute top-10 left-0 w-[320px] p-4 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50 text-caption text-slate-300 font-normal leading-relaxed pointer-events-none"
                         >
                             <div className="font-semibold text-cyan-400 mb-2">How is this calculated?</div>
-                            Without Trace (a standard chat model), the AI has to read your <span className="text-emerald-400 font-medium whitespace-nowrap">entire knowledge base</span> every time you ask a question.<br/><br/>
-                            Trace uses "Semantic Search" to quickly find and send <span className="text-teal-400 font-medium whitespace-nowrap">only the most relevant paragraphs</span> to the AI, saving you from paying for the AI to read everything else.<br/><br/>
-                            <i>Calculation includes both AI reading costs (~$1.25/1M words) and the minor cost of embedding data for search (~$0.02/1M words).</i>
+                            Without Trace (a standard chat model), the AI has to read your <span className="text-emerald-400 font-medium whitespace-nowrap">entire knowledge base</span> every time you ask a question. No indexing is required, but chatting is incredibly expensive.<br/><br/>
+                            Trace pays a one-time "indexing" cost to process your knowledge base into a database. Then, it quickly searches that database and sends <span className="text-teal-400 font-medium whitespace-nowrap">only the most relevant paragraphs</span> to the AI chat.<br/><br/>
+                            <i>Calculation compares: (Total indexing cost + Trace chat costs) vs. (Standard chat costs reading everything every time).</i>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -89,7 +88,7 @@ export const CostOptimizationPanel: React.FC = () => {
                         </div>
                         <span className="text-xs text-slate-500 font-mono flex flex-col mt-0.5 opacity-90">
                             <span>{actualTokens.toLocaleString()} chat words</span>
-                            <span>+ {totalDbTokens.toLocaleString()} search words</span>
+                            <span>+ {totalDbTokens.toLocaleString()} indexing words</span>
                         </span>
                     </div>
 
@@ -102,8 +101,9 @@ export const CostOptimizationPanel: React.FC = () => {
                         <div className="text-xl text-slate-400 font-mono line-through opacity-70">
                             ${naiveCost.toFixed(4)}
                         </div>
-                        <span className="text-xs text-slate-500 font-mono">
-                            {naiveTokens.toLocaleString()} words read
+                        <span className="text-xs text-slate-500 font-mono flex flex-col mt-0.5 opacity-90">
+                            <span>{naiveTokens.toLocaleString()} chat words</span>
+                            <span>(No indexing required)</span>
                         </span>
                     </div>
                 </div>
@@ -117,10 +117,10 @@ export const CostOptimizationPanel: React.FC = () => {
                     </div>
                     <div className="flex flex-col items-end gap-1 mb-1">
                         <span className="text-caption text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded font-mono border border-emerald-500/20">
-                            You saved {savedTokens.toLocaleString()} words!
+                            You saved {savedTokens.toLocaleString()} chat words!
                         </span>
                         <span className="text-xs text-slate-500">
-                            That's a {naiveTokens > 0 ? (100 - fillPercentage).toFixed(1) : 0}% reduction
+                            That's a {naiveTokens > 0 ? (100 - fillPercentage).toFixed(1) : 0}% reduction in AI reading
                         </span>
                     </div>
                 </div>

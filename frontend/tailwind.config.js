@@ -53,8 +53,42 @@ export default {
       },
       animation: {
         ripple: 'ripple 600ms ease-out forwards',
-      }
+      },
+      typography: (theme) => ({
+        DEFAULT: {
+          css: {
+            color: theme('colors.slate.300'),
+            a: {
+              color: theme('colors.cyan.500'),
+              '&:hover': {
+                color: theme('colors.cyan.400'),
+              },
+            },
+            h1: { color: theme('colors.slate.100') },
+            h2: { color: theme('colors.slate.100') },
+            h3: { color: theme('colors.slate.100') },
+            h4: { color: theme('colors.slate.100') },
+            strong: { color: theme('colors.slate.200') },
+            code: {
+              color: theme('colors.cyan.400'),
+              backgroundColor: theme('colors.slate.800'),
+              padding: '0.2em 0.4em',
+              borderRadius: '0.25rem',
+            },
+            pre: {
+              backgroundColor: theme('colors.slate.950'),
+              border: `1px solid ${theme('colors.slate.800')}`,
+            },
+            blockquote: {
+              color: theme('colors.slate.400'),
+              borderLeftColor: theme('colors.slate.700'),
+            },
+          },
+        },
+      }),
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 }
