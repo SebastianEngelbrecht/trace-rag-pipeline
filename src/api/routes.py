@@ -8,6 +8,9 @@ import asyncio
 from src.ingestion.crawler import AsyncCrawler
 from src.ingestion.chunker import TextChunker
 from src.api.models import templates, GenerationResponse
+from src.config.logger import get_logger
+
+logger = get_logger(__name__)
 
 app = FastAPI(title="Trace RAG Pipeline")
 
@@ -35,9 +38,13 @@ async def websocket_ingest(websocket: WebSocket):
         # Receive configuration from client
         config_data = await websocket.receive_json()
         target_url = config_data.get("url")
-        chunk_size = config_data.get("chunk_size", 500)
-        overlap = config_data.get("overlap", 50)
-        max_depth = config_data.get("max_depth", 3)
+        try:
+            chunk_size = int(config_data.get("chunk_size", 500))
+            overlap = int(config_data.get("overlap", 50))
+            max_depth = int(config_data.get("max_depth", 3))
+        except (ValueError, TypeError) as e:
+            await websocket.send_json({"status": "error", "message": f"Invalid configuration value (expected integer): {e}"})
+            return
 
         await websocket.send_json({"status": "running", "message": f"Starting crawler on {target_url} (depth={max_depth})..."})
         
@@ -114,9 +121,9 @@ async def websocket_ingest(websocket: WebSocket):
         })
         
     except WebSocketDisconnect:
-        print("Client disconnected")
+        logger.info("Client disconnected")
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error during pipeline run")
         await websocket.send_json({"status": "error", "message": str(e)})
 
 @app.post("/query/advanced", response_model=GenerationResponse)

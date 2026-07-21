@@ -19,17 +19,23 @@ logger = get_logger(__name__)
 class RAGEngine:
     def __init__(self):
         settings = get_settings()
-        os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
+        if "GOOGLE_API_KEY" not in os.environ and settings.GEMINI_API_KEY:
+            os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
         self.model_name = settings.CHAT_MODEL
         
         # Initialize dependencies
         self.db = ChromaManager()
         
         # Initialize Langchain components
-        self.embeddings = GoogleGenerativeAIEmbeddings(model=settings.EMBEDDING_MODEL)
+        api_key = os.environ.get("GOOGLE_API_KEY", settings.GEMINI_API_KEY)
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model=settings.EMBEDDING_MODEL,
+            google_api_key=api_key
+        )
         self.llm = ChatGoogleGenerativeAI(
             model=settings.CHAT_MODEL,
             temperature=0.3,
+            google_api_key=api_key,
             max_tokens=None,
             timeout=None,
             max_retries=2,
@@ -53,6 +59,10 @@ class RAGEngine:
         3. Do not formulate an answer based on your pre-trained knowledge if the context is empty or irrelevant.
         4. If you use information from a specific chunk, cite the `source_url` provided in the metadata.
         """
+        
+        # BM25 Cache
+        self._bm25_retriever = None
+        self._bm25_collection_count = -1
 
     def _reciprocal_rank_fusion(self, results_list: list[list[Document]], k: int = 60) -> list[Document]:
         """
@@ -90,18 +100,27 @@ class RAGEngine:
         vector_results = vector_retriever.invoke(user_question)
         
         # 2. Setup BM25 Retriever
-        all_data = self.db.collection.get()
-        if not all_data or not all_data.get('documents'):
+        current_count = self.db.collection.count()
+        if current_count == 0:
             return vector_results
             
-        docs = []
-        for doc_content, metadata in zip(all_data['documents'], all_data['metadatas']):
-             # Reconstruct Langchain Document objects
-             docs.append(Document(page_content=doc_content, metadata=metadata or {}))
-             
-        bm25_retriever = BM25Retriever.from_documents(docs)
-        bm25_retriever.k = top_k
-        bm25_results = bm25_retriever.invoke(user_question)
+        if self._bm25_retriever is None or self._bm25_collection_count != current_count:
+            # We explicitly ask only for documents and metadatas, rather than the default
+            # which might include large embeddings payload causing memory overhead.
+            all_data = self.db.collection.get(include=['documents', 'metadatas'])
+            if not all_data or not all_data.get('documents'):
+                return vector_results
+                
+            docs = []
+            for doc_content, metadata in zip(all_data['documents'], all_data['metadatas']):
+                 # Reconstruct Langchain Document objects
+                 docs.append(Document(page_content=doc_content, metadata=metadata or {}))
+                 
+            self._bm25_retriever = BM25Retriever.from_documents(docs)
+            self._bm25_collection_count = current_count
+            
+        self._bm25_retriever.k = top_k
+        bm25_results = self._bm25_retriever.invoke(user_question)
         
         # 3. Fuse Results
         fused_results = self._reciprocal_rank_fusion([vector_results, bm25_results])
