@@ -187,9 +187,9 @@ def query_rag_advanced(request: QueryRequest):
 
         return GenerationResponse(answer=answer, chunks=ui_chunks, prompt=prompt)
 
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("query_rag_advanced_failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/query", response_model=QueryResponse)
 def query_rag(request: QueryRequest):
