@@ -85,9 +85,15 @@ async def websocket_ingest(websocket: WebSocket):
                 
                 url, text = item
                 stats["crawled"] += 1
-                await websocket.send_json({"status": "running", "message": f"Crawled & chunking: {url} ({len(text)} characters)"})
                 
                 chunks = chunker.process_crawled_data({url: text})
+                
+                # Send structured detailed log to frontend
+                await websocket.send_json({
+                    "status": "running", 
+                    "message": f"[Crawler] -> {url}\n ↳ Extracted {len(text)} chars | Split into {len(chunks)} chunks"
+                })
+
                 for chunk in chunks:
                     stats["total_tokens"] += chunk.get("token_count", 0)
                     await chunk_queue.put(chunk)
@@ -107,7 +113,11 @@ async def websocket_ingest(websocket: WebSocket):
                 
                 stats["embedded"] += len(current_batch)
                 
-                await websocket.send_json({"status": "running", "message": f"Indexed batch of {len(current_batch)} chunks. Total indexed: {stats['embedded']}"})
+                batch_tokens = sum(c.get("token_count", 0) for c in current_batch)
+                await websocket.send_json({
+                    "status": "running", 
+                    "message": f"[Embedder] -> Indexed batch of {len(current_batch)} chunks ({batch_tokens} tokens)\n ↳ Total Pipeline Progress: {stats['embedded']} indexed chunks"
+                })
 
             while True:
                 item = await chunk_queue.get()
