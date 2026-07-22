@@ -13,3 +13,4 @@ class GenerationResponse(BaseModel):
     prompt: Optional[str] = None
     response_time_ms: Optional[float] = None
     tokens_used: Optional[int] = None
+    retrieval_time_ms: Optional[float] = None
