@@ -6,7 +6,7 @@ export function useQueryEngine() {
     const [result, setResult] = useState<GenerationResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const submitQuery = async (question: string, topK: number, temperature: number) => {
+    const submitQuery = async (question: string, topK: number, temperature: number, vectorWeight: number) => {
         if (!question.trim()) return;
         
         setIsLoading(true);
@@ -17,7 +17,7 @@ export function useQueryEngine() {
             const response = await fetch('http://127.0.0.1:8000/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question, top_k: topK, temperature })
+                body: JSON.stringify({ question, top_k: topK, temperature, vector_weight: vectorWeight })
             });
 
             if (!response.ok) {

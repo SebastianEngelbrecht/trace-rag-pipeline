@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, MessageSquare, Send, FileText, Terminal } from 'lucide-react';
+import { Sparkles, MessageSquare, Send, FileText, Terminal, Layers } from 'lucide-react';
 import { Switch } from '@base-ui-components/react/switch';
 import { useQueryEngine } from '../hooks/useQueryEngine';
 import { GenerationResultPanel } from '../components/GenerationResultPanel';
@@ -9,13 +9,14 @@ export const QueryView: React.FC = () => {
     const [question, setQuestion] = useState('');
     const [topK, setTopK] = useState(5);
     const [temperature, setTemperature] = useState(0.7);
+    const [vectorWeight, setVectorWeight] = useState(0.5);
     const [isDevMode, setIsDevMode] = useState(false);
     
     // Abstracted Logic
     const { isLoading, result, error, submitQuery } = useQueryEngine();
 
     const handleQuery = () => {
-        submitQuery(question, topK, temperature);
+        submitQuery(question, topK, temperature, vectorWeight);
     };
 
     return (
@@ -54,7 +55,7 @@ export const QueryView: React.FC = () => {
                 <div className="flex justify-between items-center bg-slate-900 border border-slate-700 p-4 rounded-lg flex-wrap gap-4">
                     <div className="flex gap-6 items-center flex-wrap">
                         <label className="text-caption flex gap-2 items-center text-slate-400">
-                            <FileText className="w-4 h-4" />
+                            <FileText className="w-4 h-4 text-emerald-500" />
                             Top K:
                             <input 
                                 type="number" 
@@ -73,7 +74,7 @@ export const QueryView: React.FC = () => {
                         </label>
                         <label className="flex gap-4 items-center text-caption text-slate-400">
                             <span className="flex items-center gap-2 w-24">
-                                <Terminal className="w-4 h-4" />
+                                <Terminal className="w-4 h-4 text-cyan-500" />
                                 Temp ({temperature.toFixed(1)})
                             </span>
                             <div className="relative flex items-center w-32">
@@ -86,6 +87,24 @@ export const QueryView: React.FC = () => {
                                     onChange={e => setTemperature(parseFloat(e.target.value))}
                                     disabled={isLoading}
                                     className="w-full accent-cyan-500 transition-all duration-300 ease-out cursor-pointer disabled:cursor-not-allowed"
+                                />
+                            </div>
+                        </label>
+                        <label className="flex gap-4 items-center text-caption text-slate-400">
+                            <span className="flex items-center gap-2 w-32">
+                                <Layers className="w-4 h-4 text-purple-500" />
+                                Vector W. ({vectorWeight.toFixed(1)})
+                            </span>
+                            <div className="relative flex items-center w-32">
+                                <input 
+                                    type="range" 
+                                    min="0" 
+                                    max="1" 
+                                    step="0.1" 
+                                    value={vectorWeight} 
+                                    onChange={e => setVectorWeight(parseFloat(e.target.value))}
+                                    disabled={isLoading}
+                                    className="w-full accent-purple-500 transition-all duration-300 ease-out cursor-pointer disabled:cursor-not-allowed"
                                 />
                             </div>
                         </label>

@@ -64,15 +64,19 @@ class RAGEngine:
         self._bm25_retriever = None
         self._bm25_cache_key = None
 
-    def _reciprocal_rank_fusion(self, results_list: list[list[Document]], k: int = 60) -> list[Document]:
+    def _reciprocal_rank_fusion(self, results_list: list[list[Document]], weights: list[float] = None, k: int = 60) -> list[Document]:
         """
         Fuses multiple ranked lists using Reciprocal Rank Fusion.
-        RRF_score = sum(1 / (k + rank))
+        RRF_score = sum(weight * 1 / (k + rank))
         """
+        if weights is None:
+            weights = [1.0] * len(results_list)
+            
         fused_scores = {}
         doc_map = {}
 
-        for docs in results_list:
+        for list_idx, docs in enumerate(results_list):
+            weight = weights[list_idx]
             for rank, doc in enumerate(docs):
                 # Prefer stable identifiers to avoid collisions across identical text chunks.
                 source_url = doc.metadata.get("source_url")
@@ -81,7 +85,7 @@ class RAGEngine:
                 if doc_id not in fused_scores:
                     fused_scores[doc_id] = 0
                     doc_map[doc_id] = doc
-                fused_scores[doc_id] += 1 / (k + rank)
+                fused_scores[doc_id] += weight * (1 / (k + rank))
 
         # Sort documents based on their fused scores internally
         reranked_results = sorted(
@@ -91,17 +95,18 @@ class RAGEngine:
         )
         
         # Max possible RRF score is when a document is rank 0 in ALL lists.
-        # Since we use 2 retrievers (BM25 and Vector), the absolute max score is (1/60) + (1/60) ≈ 0.0333...
-        max_possible_score = len(results_list) * (1 / k)
+        # Since we use 2 retrievers (BM25 and Vector), the absolute max score is sum(weight * 1/60)
+        max_possible_score = sum((w * (1 / k)) for w in weights)
 
         for score, doc_id in reranked_results:
             # Normalize the score to a 0-1 range to reflect a true "confidence percentage"
-            normalized_score = min(1.0, score / max_possible_score)
+            # Avoid division by zero if all weights are 0
+            normalized_score = min(1.0, score / max_possible_score) if max_possible_score > 0 else 0
             doc_map[doc_id].metadata["rank_score"] = normalized_score
 
         return [doc_map[doc_id] for _, doc_id in reranked_results]
 
-    def _get_hybrid_results(self, user_question: str, top_k: int = 5) -> tuple[list[Document], float]:
+    def _get_hybrid_results(self, user_question: str, top_k: int = 5, vector_weight: float = 0.5) -> tuple[list[Document], float]:
         """Gets results from BM25 and Vector matching and fuses them. Returns tuple of (results, retrieval_time_ms)."""
         import time
         start_time = time.time()
@@ -142,7 +147,8 @@ class RAGEngine:
         bm25_results = self._bm25_retriever.invoke(user_question)
         
         # 3. Fuse Results
-        fused_results = self._reciprocal_rank_fusion([vector_results, bm25_results])
+        bm25_weight = 1.0 - vector_weight
+        fused_results = self._reciprocal_rank_fusion([vector_results, bm25_results], weights=[vector_weight, bm25_weight])
         
         retrieval_time_ms = (time.time() - start_time) * 1000
         return fused_results[:top_k], retrieval_time_ms
@@ -160,7 +166,7 @@ class RAGEngine:
             
         return "\n---\n".join(formatted_parts)
 
-    def query(self, user_question: str, top_k: int = 5, temperature: float = 0.3, return_details: bool = False):
+    def query(self, user_question: str, top_k: int = 5, temperature: float = 0.3, vector_weight: float = 0.5, return_details: bool = False):
         """
         Retrieval-Augmented Generation using custom Hybrid Search.
         If return_details is true, returns (answer, prompt, docs as dicts, response_time_ms, tokens_used, retrieval_time_ms).
@@ -172,7 +178,7 @@ class RAGEngine:
         logger.info("rag_query_started", question=user_question)
         
         # 1. Get Hybrid Results
-        results, retrieval_time_ms = self._get_hybrid_results(user_question, top_k=top_k)
+        results, retrieval_time_ms = self._get_hybrid_results(user_question, top_k=top_k, vector_weight=vector_weight)
         
         # 2. Format context
         context_string = self._format_context(results)

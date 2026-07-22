@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Database, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Database, CheckCircle2, AlertCircle, Link, FileText, Layers, Layers3 } from 'lucide-react';
 import { useIngestionEngine } from '../hooks/useIngestionEngine';
 
 export const IngestionView: React.FC = () => {
@@ -17,22 +17,31 @@ export const IngestionView: React.FC = () => {
 
     return (
         <div className="flex flex-col gap-8 p-8 bg-slate-800 rounded-2xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.3),0_2px_4px_-2px_rgba(0,0,0,0.3)]">
-            <h2 className="m-0 text-heading text-slate-50">Ingestion Config</h2>
+            <h2 className="m-0 text-heading text-slate-50 flex items-center gap-3">
+                <Database className="w-8 h-8 text-cyan-500" />
+                Ingestion Config
+            </h2>
             
             <div className="flex flex-col gap-6">
-                <input 
-                    type="text" 
-                    value={url} 
-                    onChange={e => setUrl(e.target.value)} 
-                    placeholder="Enter starting URL (e.g., https://example.com)"
-                    className="text-body p-4 border border-slate-700 rounded-lg text-slate-100 bg-slate-900 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
-                    disabled={isRunning}
-                />
+                <div className="relative">
+                    <Link className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input 
+                        type="text" 
+                        value={url} 
+                        onChange={e => setUrl(e.target.value)} 
+                        placeholder="Enter starting URL (e.g., https://example.com)"
+                        className="w-full text-body pl-12 pr-4 py-4 border border-slate-700 rounded-lg text-slate-100 bg-slate-900 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+                        disabled={isRunning}
+                    />
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <label className="flex flex-col gap-2 text-caption text-slate-400">
-                        <div className="flex justify-between">
-                            <span>Max Crawl Depth</span>
+                        <div className="flex justify-between items-center">
+                            <span className="flex items-center gap-2">
+                                <Layers3 className="w-4 h-4 text-cyan-500" />
+                                Max Crawl Depth
+                            </span>
                             <span className="text-slate-50 font-medium">{maxDepth}</span>
                         </div>
                         <input 
@@ -47,8 +56,11 @@ export const IngestionView: React.FC = () => {
                         />
                     </label>
                     <label className="flex flex-col gap-2 text-caption text-slate-400">
-                        <div className="flex justify-between">
-                            <span>Chunk Size (chars)</span>
+                        <div className="flex justify-between items-center">
+                            <span className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-teal-500" />
+                                Chunk Size (chars)
+                            </span>
                             <span className="text-slate-50 font-medium">{chunkSize}</span>
                         </div>
                         <input 
@@ -59,12 +71,15 @@ export const IngestionView: React.FC = () => {
                             value={chunkSize} 
                             onChange={e => setChunkSize(parseInt(e.target.value))} 
                             disabled={isRunning} 
-                            className="w-full accent-cyan-500 transition-all duration-300 ease-out cursor-pointer disabled:cursor-not-allowed"
+                            className="w-full accent-teal-500 transition-all duration-300 ease-out cursor-pointer disabled:cursor-not-allowed"
                         />
                     </label>
                     <label className="flex flex-col gap-2 text-caption text-slate-400">
-                        <div className="flex justify-between">
-                            <span>Overlap (chars)</span>
+                        <div className="flex justify-between items-center">
+                            <span className="flex items-center gap-2">
+                                <Layers className="w-4 h-4 text-purple-500" />
+                                Overlap (chars)
+                            </span>
                             <span className="text-slate-50 font-medium">{overlap}</span>
                         </div>
                         <input 
@@ -75,7 +90,7 @@ export const IngestionView: React.FC = () => {
                             value={overlap} 
                             onChange={e => setOverlap(parseInt(e.target.value))} 
                             disabled={isRunning} 
-                            className="w-full accent-cyan-500 transition-all duration-300 ease-out cursor-pointer disabled:cursor-not-allowed"
+                            className="w-full accent-purple-500 transition-all duration-300 ease-out cursor-pointer disabled:cursor-not-allowed"
                         />
                     </label>
                 </div>

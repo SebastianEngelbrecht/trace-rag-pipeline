@@ -34,6 +34,7 @@ class QueryRequest(BaseModel):
     question: str
     top_k: int = 5
     temperature: float = 0.3
+    vector_weight: float = 0.5
 
 class QueryResponse(BaseModel):
     answer: str
@@ -242,6 +243,7 @@ def query_rag_advanced(request: QueryRequest):
             user_question=request.question,
             top_k=request.top_k,
             temperature=request.temperature,
+            vector_weight=request.vector_weight,
             return_details=True
         )
         
