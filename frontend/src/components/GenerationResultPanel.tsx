@@ -39,7 +39,7 @@ export const GenerationResultPanel: React.FC<GenerationResultPanelProps> = ({ re
                                 {result.response_time_ms && (
                                     <span className="flex items-center gap-1.5 border-l border-slate-700 pl-4" title="Generation Time">
                                         <Activity className="w-4 h-4 text-cyan-400" />
-                                        {(result.response_time_ms / 1000).toFixed(2)}s
+                                        {(((result.response_time_ms - (result.retrieval_time_ms || 0)) / 1000)).toFixed(2)}s
                                     </span>
                                 )}
                                 {result.tokens_used && (

@@ -160,6 +160,7 @@ def api_query_rag_advanced(request: QueryRequest):
             user_question=request.question,
             top_k=request.top_k,
             temperature=request.temperature,
+            vector_weight=request.vector_weight,
             return_details=True
         )
 
@@ -167,7 +168,8 @@ def api_query_rag_advanced(request: QueryRequest):
         app.state.total_queries = getattr(app.state, "total_queries", 0) + 1
         
         current_avg = getattr(app.state, "avg_response_time", 0.0)
-        app.state.avg_response_time = (current_avg * (app.state.total_queries - 1) + response_time) / app.state.total_queries
+        # Convert response_time (ms) to seconds for the rolling average
+        app.state.avg_response_time = (current_avg * (app.state.total_queries - 1) + (response_time / 1000.0)) / app.state.total_queries
         app.state.total_tokens = getattr(app.state, "total_tokens", 0) + tokens
         
         return GenerationResponse(
