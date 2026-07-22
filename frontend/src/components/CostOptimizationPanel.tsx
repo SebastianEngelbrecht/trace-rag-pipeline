@@ -6,6 +6,16 @@ import { useTelemetry } from '../hooks/useTelemetry';
 export const CostOptimizationPanel: React.FC = () => {
     const stats = useTelemetry(3000);
     const [showInfo, setShowInfo] = useState(false);
+    const [selectedModel, setSelectedModel] = useState<string>("gemini-1.5-pro");
+    
+    // Model pricing mapping per 1M tokens (Input/Generation Cost)
+    const modelPricing: Record<string, { name: string, inputCost: number }> = {
+        "gemini-1.5-flash": { name: "Gemini 3.5 Flash", inputCost: 1.50 },
+        "gemini-1.5-pro": { name: "Gemini 3.1 Pro", inputCost: 2.00 },
+        "gemini-flash-lite": { name: "Gemini 3.1 Flash-Lite", inputCost: 0.125 },
+        "gemini-legacy-pro": { name: "Gemini 2.5 Pro", inputCost: 1.25 },
+        "gemini-legacy-flash": { name: "Gemini 2.5 Flash", inputCost: 0.30 },
+    };
     
     // Real Data Strategy:
     // A pipeline without RAG forces you to stuff your entire ingested knowledge base into the context window for EVERY query.
@@ -21,17 +31,19 @@ export const CostOptimizationPanel: React.FC = () => {
     // We only compare Chat tokens for "Words Saved" because embedding happens once and isn't a chat interaction
     const savedTokens = Math.max(0, naiveTokens - actualTokens);
     
-    // Standard blended API cost (e.g., $1.25 per 1M tokens for generation)
-    // Embedding generally costs fractions of a cent ($0.02 per 1M tokens), so we will add it to the naive calculation
-    const costPerMillion = 1.25;
-    const embeddingCostPerMillion = 0.02; // Very cheap compared to generation
-
-    // Actual cost: Generation tokens used in RAG + Embedding cost to build the DB
-    const embeddingCost = (totalDbTokens / 1_000_000) * embeddingCostPerMillion;
-    const currentCost = ((actualTokens / 1_000_000) * costPerMillion) + embeddingCost;
+    // Trace uses Gemini 3.1 Flash-Lite with $0.125 / 1M input cost.
+    const traceInputCostPerMillion = 0.125;
     
-    // Naive cost: No DB built, but generating over the entire dataset every time
-    const naiveCost = (naiveTokens / 1_000_000) * costPerMillion;
+    // The embedding cost incurred by Trace ($0.02 / 1M tokens for gemini-embedding-2)
+    const embeddingCostPerMillion = 0.02;
+
+    // Actual cost: Generation tokens used in RAG (fixed to Trace's model) + Embedding cost to build the DB
+    const embeddingCost = (totalDbTokens / 1_000_000) * embeddingCostPerMillion;
+    const currentCost = ((actualTokens / 1_000_000) * traceInputCostPerMillion) + embeddingCost;
+    
+    // Select the dynamic pricing based on dropdown for the NAIVE standard chat comparison
+    const naiveCostPerMillion = modelPricing[selectedModel].inputCost;
+    const naiveCost = (naiveTokens / 1_000_000) * naiveCostPerMillion;
     
     const savedCost = Math.max(0, naiveCost - currentCost);
 
@@ -51,8 +63,23 @@ export const CostOptimizationPanel: React.FC = () => {
                         <Info className="w-4 h-4" />
                     </button>
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-emerald-400 text-caption font-semibold">
-                    <Zap className="w-3.5 h-3.5 fill-current" /> Active
+                
+                <div className="flex items-center gap-3">
+                    <select
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 text-slate-300 text-caption font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-cyan-500 transition-colors cursor-pointer"
+                    >
+                        {Object.entries(modelPricing).map(([key, model]) => (
+                            <option key={key} value={key}>
+                                {model.name} (${model.inputCost}/1M tokens)
+                            </option>
+                        ))}
+                    </select>
+                    
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-emerald-400 text-caption font-semibold">
+                        <Zap className="w-3.5 h-3.5 fill-current" /> Active
+                    </div>
                 </div>
 
                 {/* Tooltip Hover Info */}
@@ -96,7 +123,7 @@ export const CostOptimizationPanel: React.FC = () => {
                     <div className="flex flex-col gap-1 p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg">
                         <div className="flex items-center gap-2 mb-1">
                             <div className="w-2 h-2 rounded-full bg-slate-500" />
-                            <span className="text-caption text-slate-400 font-medium">Standard Chat (No Trace)</span>
+                            <span className="text-caption text-slate-400 font-medium">Standard Chat ({modelPricing[selectedModel].name})</span>
                         </div>
                         <div className="text-xl text-slate-400 font-mono line-through opacity-70">
                             ${naiveCost.toFixed(4)}
