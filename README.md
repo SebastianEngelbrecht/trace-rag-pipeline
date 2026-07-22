@@ -22,27 +22,27 @@ This complete ingestion and retrieval pipeline supports the following capabiliti
 The project encompasses tools for both offline data ingestion and live querying handled through a unified FastAPI application. See more details in the [Architecture & Guide](docs/GUIDE.md).
 
 ```text
+fontend/                 Vite React Application
+  src/                   Frontend components and views (TypeScript/Tailwind)
 src/
-  main.py                  Application entry point for the FastAPI server
+  main.py                Application entry point for the FastAPI server
   api/
-    routes.py              FastAPI REST endpoints and WebSocket ingestion logic
-    templates/
-      index.html           Interactive web dashboard UI
+    routes.py            FastAPI REST endpoints and WebSocket ingestion logic
   config/
-    settings.py            Pydantic settings loading from `.env`
-    logger.py              Structlog structured logging configuration
+    settings.py          Pydantic settings loading from `.env`
+    logger.py            Structlog structured logging configuration
   database/
-    chroma_manager.py      ChromaDB vector store integration
+    chroma_manager.py    ChromaDB vector store integration
   embedding/
-    gemini.py              Batch embedding generation
+    gemini.py            Batch embedding generation
   generation/
-    engine.py              Retrieval-Augmented Generation execution logic
+    engine.py            Retrieval-Augmented Generation execution logic
   ingestion/
-    crawler.py             Async Playwright crawler
-    chunker.py             Text cleaning and chunk generation
-Makefile                   Developer execution shortcuts
-docker-compose.yml         Container orchestration configuration
-Dockerfile                 Production image build instruction
+    crawler.py           Async Playwright crawler
+    chunker.py           Text cleaning and chunk generation
+Makefile                 Developer execution shortcuts
+docker-compose.yml       Container orchestration configuration
+Dockerfile               Production backend image build instruction
 ```
 
 For more details on the design, see the documentation in `docs/`.
@@ -57,46 +57,59 @@ For more details on the design, see the documentation in `docs/`.
 
 ## Setup & Execution
 
-### Option 1: Docker (Recommended)
+### Environment Variables
 
-1. Create a `.env` file in the root of the project with your API keys:
+1. Create frontend and backend `.env` files:
+   - For backend `.env` in the root:
    ```env
    GEMINI_API_KEY="your_api_key_here"
    LOG_LEVEL="INFO" 
    ```
-2. Build and start the containerized backend:
+   - For frontend `frontend/.env`:
+   ```env
+   VITE_API_BASE_URL="http://localhost:8000"
+   ```
+
+### Option 1: Docker (Recommended)
+
+1. Build and start the containerized backend and frontend (if configured in docker-compose):
    ```bash
    make build
    make up
    ```
-   The FastAPI server will now be running on `http://127.0.0.1:8000/docs`, and the local `data/` directory will mount persistently for ChromaDB.
+   If using the React frontend locally with Docker backend, the FastAPI server will run on `http://localhost:8000/docs`. The local `data/` directory will mount persistently for ChromaDB.
 
 ### Option 2: Local Development
 
-First, initialize the environment and install dependencies using `uv` via the provided Makefile command:
+First, initialize the Python environment and install the backend dependencies using `uv` via the provided Makefile command:
 ```bash
 make install
 ```
-*(This triggers `uv sync` and installs the required chromium browser for the crawler.)*
 
-Finally, define your environment variables. Create a `.env` file in the root of the project:
-
-```env
-GEMINI_API_KEY="your_api_key_here"
-LOG_LEVEL="INFO" # Optional: DEBUG, INFO, WARNING, ERROR
+Then, install the React frontend dependencies via npm (or use the provided Makefile shortcut):
+```bash
+make front-install
 ```
 
 ## Usage
 
-### Using the Web UI Dashboard
+### Using the Dedicated Frontend React UI
 
-The recommended way to interact with the system is via the FastAPI backend and its included UI application. Start the local server with live-reloading:
+The application backend exposes REST and WebSocket APIs. The primary way to interact with the pipeline is via the dedicated frontend React application.
 
+From the root project folder, you can boot both the FastAPI hot-reloading server and the Vite React development server:
+
+**Terminal 1 (Backend):**
 ```bash
 make dev
 ```
 
-The Web UI dashboard will run locally at `http://localhost:8000/`. You can visit `http://localhost:8000/docs` to interact with the auto-generated API Swagger documentation.
+**Terminal 2 (Frontend):**
+```bash
+make front-dev
+```
+
+The Web UI dashboard will run locally at `http://localhost:5173/`. You can visit `http://localhost:8000/docs` to interact with the auto-generated backend API Swagger documentation.
 
 For complete details on using the interactive UI, executing crawl pipelines, and running RAG requests, refer to the [System Guide](docs/GUIDE.md).
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IngestionView } from './views/IngestionView';
 import { QueryView } from './views/QueryView';
@@ -21,7 +21,7 @@ function App() {
           {/* View Toggle Tabs */}
           <div className="flex p-1.5 bg-slate-900 rounded-lg border border-slate-700 w-fit shrink-0">
             <button 
-              onClick={(e) => setActiveTab('query')}
+              onClick={() => setActiveTab('query')}
               className={`relative px-6 py-2.5 rounded-md text-caption font-semibold transition-colors z-10 flex items-center gap-2 cursor-pointer border-none outline-none ${
                 activeTab === 'query' ? 'text-slate-950' : 'text-slate-400 hover:text-slate-200 bg-transparent'
               }`}
@@ -37,7 +37,7 @@ function App() {
               Query Engine
             </button>
             <button 
-              onClick={(e) => setActiveTab('ingest')}
+              onClick={() => setActiveTab('ingest')}
               className={`relative px-6 py-2.5 rounded-md text-caption font-semibold transition-colors z-10 flex items-center gap-2 cursor-pointer border-none outline-none ${
                 activeTab === 'ingest' ? 'text-slate-950' : 'text-slate-400 hover:text-slate-200 bg-transparent'
               }`}
@@ -55,9 +55,9 @@ function App() {
           </div>
         </header>
 
-        <main className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Primary Interactions - 8/12 width */}
-          <div className="xl:col-span-8 flex flex-col gap-8 w-full min-w-0">
+        <main className="flex flex-col gap-8 w-full">
+          {/* Main Interaction Area */}
+          <div className="w-full flex-none">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -72,12 +72,10 @@ function App() {
             </AnimatePresence>
           </div>
 
-          {/* Right Column: Telemetry & Status - 4/12 width */}
-          <div className="xl:col-span-4 w-full flex flex-col gap-8 min-w-0">
-             <div className="sticky top-8 flex flex-col gap-8">
-                <TokenUsageView />
-                <CostOptimizationPanel />
-            </div>
+          {/* Telemetry then Cost */}
+          <div className="flex flex-col gap-8 w-full mt-4">
+             <TokenUsageView />
+             <CostOptimizationPanel />
           </div>
         </main>
       </div>

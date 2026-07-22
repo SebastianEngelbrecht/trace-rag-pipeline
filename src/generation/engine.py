@@ -89,11 +89,22 @@ class RAGEngine:
             key=lambda x: x[0],
             reverse=True
         )
+        
+        # Max possible RRF score is when a document is rank 0 in ALL lists.
+        # Since we use 2 retrievers (BM25 and Vector), the absolute max score is (1/60) + (1/60) ≈ 0.0333...
+        max_possible_score = len(results_list) * (1 / k)
+
+        for score, doc_id in reranked_results:
+            # Normalize the score to a 0-1 range to reflect a true "confidence percentage"
+            normalized_score = min(1.0, score / max_possible_score)
+            doc_map[doc_id].metadata["rank_score"] = normalized_score
 
         return [doc_map[doc_id] for _, doc_id in reranked_results]
 
-    def _get_hybrid_results(self, user_question: str, top_k: int = 5) -> list[Document]:
-        """Gets results from BM25 and Vector matching and fuses them."""
+    def _get_hybrid_results(self, user_question: str, top_k: int = 5) -> tuple[list[Document], float]:
+        """Gets results from BM25 and Vector matching and fuses them. Returns tuple of (results, retrieval_time_ms)."""
+        import time
+        start_time = time.time()
         
         # 1. Setup Vector Retriever
         vector_retriever = self.vector_store.as_retriever(search_kwargs={"k": top_k})
@@ -104,7 +115,8 @@ class RAGEngine:
         all_ids = self.db.collection.get(include=[])
         current_count = len(all_ids.get("ids", []))
         if current_count == 0:
-            return vector_results
+            retrieval_time_ms = (time.time() - start_time) * 1000
+            return vector_results, retrieval_time_ms
             
         # Create a stable hash based on all IDs to detect upserts/updates
         # even if the total count remains the exact same number
@@ -115,7 +127,8 @@ class RAGEngine:
             # which might include large embeddings payload causing memory overhead.
             all_data = self.db.collection.get(include=['documents', 'metadatas'])
             if not all_data or not all_data.get('documents'):
-                return vector_results
+                retrieval_time_ms = (time.time() - start_time) * 1000
+                return vector_results, retrieval_time_ms
                 
             docs = []
             for doc_content, metadata in zip(all_data['documents'], all_data['metadatas']):
@@ -130,7 +143,9 @@ class RAGEngine:
         
         # 3. Fuse Results
         fused_results = self._reciprocal_rank_fusion([vector_results, bm25_results])
-        return fused_results[:top_k]
+        
+        retrieval_time_ms = (time.time() - start_time) * 1000
+        return fused_results[:top_k], retrieval_time_ms
 
     def _format_context(self, retrieved_docs) -> str:
         """Helper to format LangChain Document output into a readable string for the LLM."""
@@ -145,21 +160,19 @@ class RAGEngine:
             
         return "\n---\n".join(formatted_parts)
 
-    def query(self, user_question: str, top_k: int = 5, temperature: float = 0.3) -> tuple[str, str, list, float, int]:
+    def query(self, user_question: str, top_k: int = 5, temperature: float = 0.3, return_details: bool = False):
         """
         Retrieval-Augmented Generation using custom Hybrid Search.
-        Returns (answer, prompt, docs as dicts, response_time_ms, tokens_used)
+        If return_details is true, returns (answer, prompt, docs as dicts, response_time_ms, tokens_used, retrieval_time_ms).
+        Otherwise just returns the answer as a string.
         """
         import time
         start_time = time.time()
         
         logger.info("rag_query_started", question=user_question)
         
-        # Override temperature on LLM object per query dynamically
-        self.llm.temperature = temperature
-        
         # 1. Get Hybrid Results
-        results = self._get_hybrid_results(user_question, top_k=top_k)
+        results, retrieval_time_ms = self._get_hybrid_results(user_question, top_k=top_k)
         
         # 2. Format context
         context_string = self._format_context(results)
@@ -175,8 +188,8 @@ class RAGEngine:
         User Question: {user_question}
         """
         
-        # 5. Generate response using LangChain LLM
-        response = self.llm.invoke(prompt)
+        # 5. Generate response using LangChain LLM (dynamically bind params per-request to avoid singleton pollution)
+        response = self.llm.bind(temperature=temperature).invoke(prompt)
         content = response.content
         if isinstance(content, list):
             content = "".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
@@ -195,7 +208,9 @@ class RAGEngine:
         response_time_ms = (time.time() - start_time) * 1000
         
         logger.info("rag_response_generated")
-        return content, prompt, docs_dicts, response_time_ms, tokens_used
+        if return_details:
+            return content, prompt, docs_dicts, response_time_ms, tokens_used, retrieval_time_ms
+        return content
 
 if __name__ == "__main__":
     # Test script for the engine

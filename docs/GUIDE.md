@@ -9,7 +9,7 @@ The pipeline is built as a single unified FastAPI application (`src/main.py` -> 
 ```mermaid
 graph TD
     A[Client User] -->|WebSocket /ws/ingest| B[Streaming Ingestion Pipeline]
-    A -->|POST /query/advanced| C[Retrieval & Generation Engine]
+    A -->|POST /query| C[Retrieval & Generation Engine]
     
     subgraph Ingestion [Streaming Data Ingestion]
         B --> D[Async Crawler (Playwright)]
@@ -35,23 +35,30 @@ graph TD
 
 ## 2. Using the Dashboard
 
-The recommended way to interact with the pipeline is via the included web user interface. Assuming the server is running (`make dev`), navigate to: 
+The recommended way to interact with the pipeline is via the included React web user interface. Assuming both servers are running (`make dev`), navigate to: 
 
-**`http://localhost:8000/`**
+**`http://localhost:5173/`**
 
 ### Ingesting Data
 
-1. Enter a valid target URL (e.g., `https://example.com`) in the **Ingestion Configuration**.
-2. Specify your crawl configurations:
-   - **Crawl Depth:** How many link-hops away from the original URL the crawler will go. (Setting to 1 only crawls the given URL).
-   - **Chunk Size / Overlap:** Determines how text is partitioned before it is embedded. Default is reasonable for most contexts.
-3. Click **Start Ingestion Pipeline**. A live feed of the ingestion background workers will output below via WebSocket.
+1. Navigate to the **Database Ingestion** tab.
+2. Enter a valid target URL (e.g., `https://example.com`) in the **Ingestion Configuration**.
+3. Specify your crawl configurations:
+   - **Crawl Depth:** How many link-hops away from the original URL the crawler will go. (Setting to 1 only crawls the given URL. Max 3).
+   - **Chunk Size / Overlap:** Determines how text is partitioned before it is embedded. (Max Chunk Size 1000, Overlap 100).
+4. Click **Run Pipeline**. A live feed of the ingestion background workers will output below via WebSocket.
 
 ### Querying Data
 
-1. Once data is verified to be inside the vector database via the logs, switch over to the **Query** section on the right side of the dashboard.
-2. Enter your question and preferred top-K amount (how many database chunks to retrieve for context).
-3. The response will return the final LLM-synthesized answer, along with the raw chunks used to generate that answer (for verification).
+1. Once data is verified to be inside the vector database via the logs, switch over to the **RAG Engine** tab at the top.
+2. Enter your question, adjust the API connection Temperature, and set your preferred Top-K amount (max 5) representing how many database chunks to retrieve for context.
+3. Click "Generate Insights". The response will return the final LLM-synthesized answer rendered in Markdown, along with the raw chunks used to generate that answer (for verification).
+4. **Dev Mode:** You can toggle the "Dev Mode" switch inside the Query Intelligence Engine to reveal the raw formatted instruction payloads hitting the LLM API.
+
+### Cost & Telemetry
+
+1. Navigate to the **Dashboard Overview** tab.
+2. Here you can view dynamic charts representing the total amount of standard chat tokens saved by using Trace RAG. Real system token counts natively display how much data your indexing and generation actually consumed compared to standard chat footprints.
 
 ## 3. Working With The Local Vector DB
 
@@ -62,9 +69,8 @@ The default configuration saves the ChromaDB indexes in the `data/` directory at
 
 ## 4. API Endpoints Reference
 
-Currently, the primary exposed systems are:
+Currently, the primary exposed systems from the FastAPI Backend are:
 
-- `GET /` - UI Dashboard.
 - `WS /ws/ingest` - WebSocket connection handling live streaming web crawling & embedding pipeline.
-- `POST /query/advanced` - Provide `{ "question": "...", "top_k": 5 }` to execute the full retrieval, format the prompt, and execute the Gemini LLM. Returns LLM answer alongside retrieved citation chunks.
-- `GET /api/v1/stats` - Returns vector DB document count statistics.
+- `POST /api/v1/query` - Provide `{ "question": "...", "top_k": 5, "temperature": 0.3 }` to execute the full retrieval, format the prompt, and execute the Gemini LLM. Returns LLM answer alongside retrieved citation chunks, response time, and token counts.
+- `GET /api/v1/stats` - Returns a comprehensive summary payload containing stats for total queries, average response times, UI database stats and total combined model token counts (both embedding and generation).

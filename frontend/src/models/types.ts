@@ -2,6 +2,7 @@ export interface UiChunk {
   content: string;
   source_url: string;
   chunk_index: number;
+  rank_score?: number;
 }
 
 export interface GenerationResponse {
@@ -10,6 +11,7 @@ export interface GenerationResponse {
   prompt: string;
   response_time_ms?: number;
   tokens_used?: number;
+  retrieval_time_ms?: number;
 }
 
 export interface IngestionConfig {

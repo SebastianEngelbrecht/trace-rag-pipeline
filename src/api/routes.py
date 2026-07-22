@@ -6,6 +6,7 @@ from functools import lru_cache
 from src.generation.engine import RAGEngine
 import traceback
 import asyncio
+import time
 from src.ingestion.crawler import AsyncCrawler
 from src.ingestion.chunker import TextChunker
 from src.api.models import templates, GenerationResponse
@@ -70,7 +71,7 @@ async def websocket_ingest(websocket: WebSocket):
         
         chunk_queue = asyncio.Queue()
         chunker = TextChunker(chunk_size=chunk_size, overlap=overlap)
-        stats = {"crawled": 0, "embedded": 0, "total_chars": 0}
+        stats = {"crawled": 0, "embedded": 0, "total_tokens": 0}
 
         async def ws_chunking_worker():
             """Continuously reads crawled pages, chunks them, and passes them to embedder."""
@@ -83,11 +84,11 @@ async def websocket_ingest(websocket: WebSocket):
                 
                 url, text = item
                 stats["crawled"] += 1
-                stats["total_chars"] += len(text)
                 await websocket.send_json({"status": "running", "message": f"Crawled & chunking: {url} ({len(text)} characters)"})
                 
                 chunks = chunker.process_crawled_data({url: text})
                 for chunk in chunks:
+                    stats["total_tokens"] += chunk.get("token_count", 0)
                     await chunk_queue.put(chunk)
                 out_queue.task_done()
 
@@ -102,7 +103,9 @@ async def websocket_ingest(websocket: WebSocket):
                 chunk_texts = [c["content"] for c in current_batch]
                 embeddings = await loop.run_in_executor(None, engine.embeddings.embed_documents, chunk_texts)
                 await loop.run_in_executor(None, engine.db.add_chunks, current_batch, embeddings)
+                
                 stats["embedded"] += len(current_batch)
+                
                 await websocket.send_json({"status": "running", "message": f"Indexed batch of {len(current_batch)} chunks. Total indexed: {stats['embedded']}"})
 
             while True:
@@ -132,14 +135,12 @@ async def websocket_ingest(websocket: WebSocket):
             # Wait for all workers to finish processing their queues
             await chunk_task
             await embed_task
-
-        # Approximate token count assuming ~4 characters per token for English text
-        approx_tokens = stats["total_chars"] // 4
         
         await websocket.send_json({
             "status": "complete", 
-            "message": f"Pipeline run complete. Crawled {stats['crawled']} pages, indexed {stats['embedded']} chunks. (~{approx_tokens} tokens)"
+            "message": f"Pipeline run complete. Crawled {stats['crawled']} pages, indexed {stats['embedded']} chunks. ({stats['total_tokens']} tokens)"
         })
+        await websocket.close()
         
     except WebSocketDisconnect:
         logger.info("Client disconnected")
@@ -147,10 +148,38 @@ async def websocket_ingest(websocket: WebSocket):
         logger.exception("Error during pipeline run")
         await websocket.send_json({"status": "error", "message": str(e)})
 
-@router.post("/query/advanced", response_model=GenerationResponse)
+@router.post("/query", response_model=GenerationResponse)
 def api_query_rag_advanced(request: QueryRequest):
     """Hits the hybrid database, formats chunks, asks LLM, and returns full context."""
-    return query_rag_advanced(request)
+    engine = get_engine()
+    start_time = time.time()
+    
+    try:
+        content, prompt, docs, response_time, tokens, retrieval_time = engine.query(
+            user_question=request.question,
+            top_k=request.top_k,
+            temperature=request.temperature,
+            return_details=True
+        )
+
+        # Update global stats
+        app.state.total_queries = getattr(app.state, "total_queries", 0) + 1
+        
+        current_avg = getattr(app.state, "avg_response_time", 0.0)
+        app.state.avg_response_time = (current_avg * (app.state.total_queries - 1) + response_time) / app.state.total_queries
+        app.state.total_tokens = getattr(app.state, "total_tokens", 0) + tokens
+        
+        return GenerationResponse(
+            answer=content,
+            chunks=docs,
+            prompt=prompt,
+            response_time_ms=response_time,
+            tokens_used=tokens,
+            retrieval_time_ms=retrieval_time
+        )
+    except Exception as e:
+        logger.exception("query_error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 class StatsResponse(BaseModel):
     total_queries: int
@@ -171,14 +200,25 @@ def get_stats():
     tokens = getattr(app.state, "total_tokens", 0)
     
     try:
+        cache_ttl_s = 30
+        now = time.time()
+        
         chunks = engine.db.collection.count()
         
-        # Calculate total tokens by summing up the token_count metadata across all chunks
-        total_db_tokens = 0
-        if chunks > 0:
+        cached_tokens = getattr(app.state, "cached_total_db_tokens", None)
+        cached_at = getattr(app.state, "cached_total_db_tokens_at", 0.0)
+
+        if cached_tokens is not None and (now - cached_at) < cache_ttl_s:
+            total_db_tokens = cached_tokens
+        elif chunks > 0:
             db_data = engine.db.collection.get(include=["metadatas"])
-            for meta in db_data.get("metadatas", []):
-                total_db_tokens += meta.get("token_count", getattr(engine.db, "default_tokens", 0)) # Default to 0 if token_count doesn't exist
+            total_db_tokens = sum((meta or {}).get("token_count", 0) for meta in db_data.get("metadatas", []))
+            
+            app.state.cached_total_db_tokens = total_db_tokens
+            app.state.cached_total_db_tokens_at = now
+        else:
+            total_db_tokens = 0
+            
     except Exception as e:
         logger.error(f"Error getting chroma db stats: {e}")
         chunks = 0
@@ -192,16 +232,17 @@ def get_stats():
         total_db_tokens=total_db_tokens
     )
 
-@app.post("/query/advanced", response_model=GenerationResponse)
+@app.post("/query", response_model=GenerationResponse)
 def query_rag_advanced(request: QueryRequest):
     """Hits the vector database, formats chunks, asks LLM, and returns full context (Prompt, Chunks, Answer)."""
     try:
         engine = get_engine()
         
-        answer, prompt, docs, response_time_ms, tokens_used = engine.query(
+        answer, prompt, docs, response_time_ms, tokens_used, retrieval_time_ms = engine.query(
             user_question=request.question,
             top_k=request.top_k,
-            temperature=request.temperature
+            temperature=request.temperature,
+            return_details=True
         )
         
         # Update global stats for telemetry UI
@@ -220,22 +261,12 @@ def query_rag_advanced(request: QueryRequest):
             chunks=docs, 
             prompt=prompt,
             response_time_ms=response_time_ms,
-            tokens_used=tokens_used
+            tokens_used=tokens_used,
+            retrieval_time_ms=retrieval_time_ms
         )
 
     except Exception:
         logger.exception("query_rag_advanced_failed")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.post("/query", response_model=QueryResponse)
-def query_rag(request: QueryRequest):
-    """Hits the database with a hybrid query (BM25 + Semantic Vector), formats the retrieved chunks, and asks the LLM to summarize."""
-    try:
-        engine = get_engine()
-        answer = engine.query(request.question, top_k=request.top_k)
-        return QueryResponse(answer=answer)
-    except Exception:
-        logger.exception("query_rag_failed")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/health")
@@ -245,24 +276,5 @@ def health_check():
         return {"status": "ok", "db_count": engine.db.collection.count()}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
-
-class CrawlRequest(BaseModel):
-    url: str
-    max_depth: int = 1
-
-@router.post("/crawl")
-async def api_crawl(request: CrawlRequest):
-    """Old crawling backwards compatibility endpoint."""
-    return {"status": "success", "message": "Background task deprecated, please use websocket /ws/ingest."}
-
-@router.get("/stats")
-def api_stats():
-    """Old DB stats backwards compatibility endpoint."""
-    return {"status": "success", "db_count": get_engine().db.collection.count()}
-
-@router.post("/query", response_model=QueryResponse)
-def api_query_rag(request: QueryRequest):
-    """Hits the database with a hybrid query (BM25 + Semantic Vector), formats the retrieved chunks, and asks the LLM to summarize."""
-    return query_rag(request)
 
 app.include_router(router)

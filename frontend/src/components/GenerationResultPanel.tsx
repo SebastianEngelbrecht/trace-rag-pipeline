@@ -28,10 +28,16 @@ export const GenerationResultPanel: React.FC<GenerationResultPanelProps> = ({ re
                             <Sparkles className="w-5 h-5 text-cyan-500" />
                             Synthesized Answer
                         </div>
-                        {(result.response_time_ms || result.tokens_used) && (
+                        {(result.response_time_ms || result.tokens_used || result.retrieval_time_ms) && (
                             <div className="flex items-center gap-4 text-caption font-mono text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded border border-slate-700">
+                                {result.retrieval_time_ms && (
+                                    <span className="flex items-center gap-1.5" title="Retrieval Time">
+                                        <Activity className="w-4 h-4 text-purple-400" />
+                                        {(result.retrieval_time_ms / 1000).toFixed(2)}s
+                                    </span>
+                                )}
                                 {result.response_time_ms && (
-                                    <span className="flex items-center gap-1.5" title="Generation Time">
+                                    <span className="flex items-center gap-1.5 border-l border-slate-700 pl-4" title="Generation Time">
                                         <Activity className="w-4 h-4 text-cyan-400" />
                                         {(result.response_time_ms / 1000).toFixed(2)}s
                                     </span>
@@ -73,6 +79,13 @@ export const GenerationResultPanel: React.FC<GenerationResultPanelProps> = ({ re
                                         {chunk.source_url}
                                     </a>
                                 </div>
+                                {chunk.rank_score !== undefined && (
+                                    <div className="text-caption font-semibold mb-4 flex items-center gap-2">
+                                        <div className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded text-xs" title="Confidence Score">
+                                            Confidence Score: {(chunk.rank_score * 100).toFixed(1)}%
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="text-caption whitespace-pre-wrap text-slate-400 leading-relaxed pl-8 border-l-2 border-slate-800">
                                     {chunk.content}
                                 </div>
@@ -96,7 +109,7 @@ export const GenerationResultPanel: React.FC<GenerationResultPanelProps> = ({ re
                             </h3>
                             <div className="relative group">
                                 <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-950/80 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" />
-                                <pre className="text-caption bg-slate-950 text-slate-400 p-6 overflow-x-auto rounded-lg border border-slate-800 border-l-2 border-l-teal-500 font-mono max-h-[300px] whitespace-pre-wrap word-break hover:max-h-none transition-all shadow-inner">
+                                <pre className="text-caption bg-slate-950 text-slate-400 p-6 overflow-x-auto rounded-lg border border-slate-800 border-l-2 border-l-teal-500 font-mono max-h-[300px] whitespace-pre-wrap break-words hover:max-h-none transition-all shadow-inner">
                                     {result.prompt}
                                 </pre>
                             </div>
