@@ -12,7 +12,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://backend:8000', // Assuming your python backend runs on 8000
+        target: 'http://api:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       }
