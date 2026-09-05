@@ -115,7 +115,7 @@
             document.getElementById('questionInput').value = '';
 
             try {
-                const response = await fetch('/query/advanced', {
+                const response = await fetch('/query', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ question: question, top_k: parseInt(topK) })
